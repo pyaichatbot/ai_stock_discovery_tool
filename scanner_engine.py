@@ -19,6 +19,7 @@ from strategies.orb_strategy import OpeningRangeBreakout
 from strategies.vwap_strategy import VWAPPullback
 from strategies.momentum_strategy import MomentumSwing
 from strategies.hvb_strategy import HighVolatilityBreakout
+from strategies.earnings_strategy import EarningsEventDrift
 
 
 class ScannerEngine:
@@ -39,16 +40,27 @@ class ScannerEngine:
         self.vwap = VWAPPullback(config)
         self.momentum = MomentumSwing(config)
         self.hvb = HighVolatilityBreakout(config)
+        self.earnings = EarningsEventDrift(config)
     
-    def scan_market(self, mode: str = "intraday", enable_hvb: bool = False) -> List[Dict]:
+    def scan_market(self, mode: str = "intraday", enable_hvb: bool = False, enable_penny_stock: bool = False) -> List[Dict]:
         """
         Scan entire market and return top picks
         
         Args:
             mode: 'intraday' or 'swing'
             enable_hvb: Enable high-risk HVB mode (opt-in)
+            enable_penny_stock: Enable penny stock mode (opt-in, high risk)
         """
         print(f"🔍 Scanning {len(self.config.NIFTY_SYMBOLS)} stocks...")
+        
+        # Penny stock mode warning
+        if enable_penny_stock:
+            print("⚠️  PENNY STOCK MODE ENABLED - HIGH RISK")
+            print("   • Stocks priced ₹1-50 only")
+            print("   • Higher volatility and manipulation risk")
+            print("   • Stricter position limits applied")
+            print("   • Use with extreme caution!")
+            print("")
         
         # Check market regime
         index_trend = self.fetcher.get_index_trend()
@@ -75,7 +87,7 @@ class ScannerEngine:
         hvb_count = 0
         
         for symbol in self.config.NIFTY_SYMBOLS:
-            pick = self._analyze_symbol(symbol, mode, index_trend, enable_hvb)
+            pick = self._analyze_symbol(symbol, mode, index_trend, enable_hvb, enable_penny_stock)
             
             if pick:
                 # Apply learning adjustments
@@ -94,7 +106,17 @@ class ScannerEngine:
         
         # Sort by conviction and take top N
         candidates.sort(key=lambda x: x['conviction_score'], reverse=True)
-        top_picks = candidates[:self.config.TOP_N_PICKS]
+        
+        # Apply penny stock limit if enabled
+        if enable_penny_stock:
+            penny_picks = [p for p in candidates if p.get('is_penny_stock', False)]
+            normal_picks = [p for p in candidates if not p.get('is_penny_stock', False)]
+            # Limit penny stock picks
+            penny_picks = penny_picks[:self.config.PENNY_STOCK_MAX_PICKS]
+            # Combine: penny stocks first (up to limit), then normal picks
+            top_picks = (penny_picks + normal_picks)[:self.config.TOP_N_PICKS]
+        else:
+            top_picks = candidates[:self.config.TOP_N_PICKS]
         
         # Save to ledger
         for pick in top_picks:
@@ -103,7 +125,7 @@ class ScannerEngine:
         
         return top_picks
     
-    def _analyze_symbol(self, symbol: str, mode: str, regime: str, enable_hvb: bool) -> Optional[Dict]:
+    def _analyze_symbol(self, symbol: str, mode: str, regime: str, enable_hvb: bool, enable_penny_stock: bool = False) -> Optional[Dict]:
         """Run all strategies on a symbol"""
         # Fetch data
         daily_df = self.fetcher.get_stock_data(symbol, period="60d", interval="1d")
@@ -115,10 +137,29 @@ class ScannerEngine:
         current_price = daily_df['close'].iloc[-1]
         avg_volume = daily_df['volume'].mean()
         
-        if (current_price < self.config.MIN_PRICE or 
-            current_price > self.config.MAX_PRICE or
-            avg_volume < self.config.MIN_AVG_VOLUME):
+        # Price filtering (different logic for penny stock mode)
+        if enable_penny_stock:
+            # Penny stock mode: only stocks between PENNY_STOCK_MIN_PRICE and PENNY_STOCK_MAX_PRICE
+            if (current_price < self.config.PENNY_STOCK_MIN_PRICE or 
+                current_price > self.config.PENNY_STOCK_MAX_PRICE):
+                return None
+        else:
+            # Normal mode: exclude penny stocks (MIN_PRICE to MAX_PRICE)
+            if (current_price < self.config.MIN_PRICE or 
+                current_price > self.config.MAX_PRICE):
+                return None
+        
+        # Volume filter applies to both modes
+        if avg_volume < self.config.MIN_AVG_VOLUME:
             return None
+        
+        # Circuit breaker check: Skip stocks in trading halt
+        if self.market_context.is_circuit_breaker_hit(symbol):
+            return None  # Filtered out: circuit breaker hit
+        
+        # Circuit breaker check: Skip stocks in trading halt
+        if self.market_context.is_circuit_breaker_hit(symbol):
+            return None  # Filtered out: circuit breaker hit
         
         # Risk management: Check if we can trade this symbol
         volatility_percentile = TechnicalIndicators.calculate_volatility_percentile(daily_df) if daily_df is not None else None
@@ -139,13 +180,14 @@ class ScannerEngine:
             # If news fetch fails, continue (don't block scanning)
             pass
         
-        # Get sentiment data for scoring
+        # Get sentiment data for scoring (including earnings detection)
         sentiment_data = None
         try:
             sentiment = self.news_fetcher.get_sentiment_for_symbol(symbol)
             sentiment_data = {
                 'polarity': sentiment['polarity'],
-                'confidence': sentiment['confidence']
+                'confidence': sentiment['confidence'],
+                'earnings_detected': sentiment.get('earnings_detected', False)
             }
         except Exception as e:
             # If sentiment fetch fails, continue without sentiment (neutral)
@@ -171,6 +213,12 @@ class ScannerEngine:
         if momentum_signal:
             results.append(momentum_signal)
         
+        # Earnings/Event Drift strategy (only if earnings detected)
+        if sentiment_data and sentiment_data.get('earnings_detected', False):
+            earnings_signal = self.earnings.analyze(symbol, daily_df, sentiment_data)
+            if earnings_signal:
+                results.append(earnings_signal)
+        
         # HVB (only if explicitly enabled)
         if enable_hvb and self.config.HVB_ENABLED:
             hvb_signal = self.hvb.analyze(symbol, daily_df, None, sentiment_data)
@@ -182,6 +230,14 @@ class ScannerEngine:
         
         # Take best strategy for this symbol
         best = max(results, key=lambda x: x['conviction_score'])
+        
+        # Circuit breaker warning: Check if near circuit breaker
+        near_circuit_breaker = self.market_context.is_near_circuit_breaker(symbol)
+        if near_circuit_breaker:
+            if 'features' not in best:
+                best['features'] = {}
+            best['features']['near_circuit_breaker'] = True
+            best['risk_warning'] = 'Near circuit breaker - high volatility risk'
         
         # Index/Sector confirmation (PRD 4.1, 4.3)
         index_confirmation = self.market_context.check_index_confirmation(symbol, regime)
@@ -198,14 +254,25 @@ class ScannerEngine:
         best['features']['relative_strength'] = index_confirmation.get('relative_strength')
         best['features']['index_trend'] = index_confirmation.get('index_trend')
         
-        # Calculate position size
-        risk_amount = self.config.TOTAL_BUDGET * self.config.MAX_RISK_PER_TRADE
+        # Calculate position size (stricter for penny stocks)
+        if enable_penny_stock:
+            risk_amount = self.config.TOTAL_BUDGET * self.config.PENNY_STOCK_MAX_RISK_PCT
+        else:
+            risk_amount = self.config.TOTAL_BUDGET * self.config.MAX_RISK_PER_TRADE
+        
         risk_per_share = abs(best['entry_price'] - best['stop_loss'])
         
         if risk_per_share > 0:
             position_size = risk_amount / risk_per_share
         else:
             position_size = 0
+        
+        # Mark as penny stock in features
+        if enable_penny_stock:
+            if 'features' not in best:
+                best['features'] = {}
+            best['features']['penny_stock'] = True
+            best['is_penny_stock'] = True
         
         # Generate pick ID
         pick_id = f"{symbol.replace('.NS', '')}_{datetime.now().strftime('%Y%m%d_%H%M')}"

@@ -8,23 +8,33 @@ import argparse
 from datetime import datetime
 
 from config import Config
+from config_manager import ConfigManager
 from scanner_engine import ScannerEngine
 from output_formatter import OutputFormatter
 from database import PickLedger
+from scheduler import AutomationScheduler
 
 
 def cmd_scan(args, config: Config):
-    """Run market scan"""
+    """Run market scan with smart configuration"""
+    # Get flags
+    enable_hvb = args.hvb
+    enable_penny_stock = args.penny_stock if hasattr(args, 'penny_stock') else False
+    profile = getattr(args, 'profile', None)
+    
+    # Smart configuration: Auto-configure based on flags
+    # This allows using --penny-stock without changing code!
+    if enable_penny_stock or enable_hvb or profile:
+        config = ConfigManager.create_config(
+            profile=profile,
+            enable_penny_stock=enable_penny_stock,
+            enable_hvb=enable_hvb
+        )
+    
     scanner = ScannerEngine(config)
     formatter = OutputFormatter()
     
     mode = args.mode
-    enable_hvb = args.hvb
-    
-    if enable_hvb and not config.HVB_ENABLED:
-        print("⚠️  HVB mode requested but not enabled in config")
-        print("   Set HVB_ENABLED = True in config.py to enable")
-        return
     
     if enable_hvb:
         print("⚠️  HIGH RISK MODE ENABLED - HVB picks will be included")
@@ -32,7 +42,7 @@ def cmd_scan(args, config: Config):
         print()
     
     # Run scan
-    picks = scanner.scan_market(mode=mode, enable_hvb=enable_hvb)
+    picks = scanner.scan_market(mode=mode, enable_hvb=enable_hvb, enable_penny_stock=enable_penny_stock)
     
     # Format and display
     date_str = datetime.now().strftime("%b %d, %Y")
@@ -105,6 +115,21 @@ def cmd_review(args):
     print(output)
 
 
+def cmd_schedule(args, config: Config):
+    """Manage automation scheduler"""
+    scheduler = AutomationScheduler(config)
+    action = args.schedule_action
+    
+    if action == 'enable':
+        scheduler.start()
+    elif action == 'disable':
+        scheduler.stop()
+    elif action == 'status':
+        scheduler.status()
+    else:
+        print("⚠️  Unknown schedule action. Use: enable, disable, or status")
+
+
 def main():
     """Main entry point with CLI argument parsing"""
     
@@ -138,6 +163,10 @@ Examples:
                             help='Trading mode (default: intraday)')
     scan_parser.add_argument('--hvb', action='store_true',
                             help='Enable HIGH RISK HVB mode (opt-in)')
+    scan_parser.add_argument('--penny-stock', action='store_true',
+                            help='Enable Penny Stock mode (auto-configures: smallcap250, lower threshold)')
+    scan_parser.add_argument('--profile', choices=['normal', 'penny_stock', 'hvb', 'aggressive', 'conservative'],
+                            help='Use preset configuration profile (overrides other flags)')
     
     # Feedback command
     feedback_parser = subparsers.add_parser('feedback', help='Add feedback for a pick')
@@ -159,13 +188,21 @@ Examples:
     review_parser.add_argument('--period', choices=['day', 'week', 'month'],
                               default='week', help='Review period')
     
+    # Schedule command
+    parser_schedule = subparsers.add_parser('schedule', help='Automation scheduling')
+    schedule_subparsers = parser_schedule.add_subparsers(dest='schedule_action', help='Schedule action')
+    
+    schedule_subparsers.add_parser('enable', help='Enable automation scheduler')
+    schedule_subparsers.add_parser('disable', help='Disable automation scheduler')
+    schedule_subparsers.add_parser('status', help='Show scheduler status')
+    
     args = parser.parse_args()
     
     if not args.command:
         parser.print_help()
         return
     
-    # Load config
+    # Load base config (will be overridden by smart config if needed)
     config = Config()
     
     # Route to command
@@ -177,6 +214,8 @@ Examples:
         cmd_compute_outcomes(args, config)
     elif args.command == 'review':
         cmd_review(args)
+    elif args.command == 'schedule':
+        cmd_schedule(args, config)
 
 
 if __name__ == "__main__":

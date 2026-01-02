@@ -74,7 +74,10 @@ class SymbolLoader:
             'nifty50': 'NIFTY 50',
             'nifty100': 'NIFTY 100',
             'nifty200': 'NIFTY 200',
-            'nifty500': 'NIFTY 500'
+            'nifty500': 'NIFTY 500',
+            'nifty_smallcap100': 'NIFTY SMALLCAP 100',
+            'nifty_smallcap250': 'NIFTY SMALLCAP 250',
+            'nifty_midcap150': 'NIFTY MIDCAP 150'
         }
         
         nse_index_name = index_map.get(index_name, 'NIFTY 50')
@@ -423,3 +426,53 @@ def load_from_csv(csv_path: str = "symbols.csv") -> List[str]:
     """Quick loader from CSV"""
     loader = SymbolLoader()
     return loader._load_from_csv(csv_path)
+
+
+def load_nifty_smallcap100() -> List[str]:
+    """Quick loader for NIFTY Smallcap 100 (contains many penny stocks)"""
+    loader = SymbolLoader()
+    return loader.get_symbols("nifty_smallcap100")
+
+
+def load_nifty_smallcap250() -> List[str]:
+    """Quick loader for NIFTY Smallcap 250 (larger universe of penny stocks)"""
+    loader = SymbolLoader()
+    return loader.get_symbols("nifty_smallcap250")
+
+
+def load_penny_stocks_from_price_filter(max_price: float = 50.0, source: str = "nifty_smallcap250") -> List[str]:
+    """
+    Load penny stocks by filtering symbols based on current price
+    
+    Args:
+        max_price: Maximum price threshold (default ₹50)
+        source: Source index to filter from ('nifty_smallcap250', 'nifty500', etc.)
+    
+    Returns:
+        List of symbols with .NS suffix that are priced below max_price
+    """
+    import yfinance as yf
+    
+    # Load base symbols
+    loader = SymbolLoader()
+    all_symbols = loader.get_symbols(source, refresh=False)
+    
+    penny_stocks = []
+    print(f"🔍 Filtering penny stocks (price < ₹{max_price}) from {len(all_symbols)} symbols...")
+    
+    for symbol in all_symbols:
+        try:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period='5d')
+            if not data.empty:
+                current_price = data['Close'].iloc[-1]
+                if current_price <= max_price:
+                    penny_stocks.append(symbol)
+                    if len(penny_stocks) % 10 == 0:
+                        print(f"   Found {len(penny_stocks)} penny stocks so far...")
+        except Exception:
+            # Skip symbols that fail to fetch
+            continue
+    
+    print(f"✅ Found {len(penny_stocks)} penny stocks priced below ₹{max_price}")
+    return penny_stocks

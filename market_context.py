@@ -179,4 +179,81 @@ class MarketContext:
             'relative_strength': relative_strength,
             'reason': f"Index: {index_trend}, RS: {relative_strength:.2f}" if relative_strength else f"Index: {index_trend}, RS: N/A"
         }
+    
+    def is_circuit_breaker_hit(self, symbol: str) -> bool:
+        """
+        Check if stock hit circuit breaker (trading halt)
+        
+        India market circuit breakers:
+        - 10% move → 15-minute halt
+        - 15% move → 45-minute halt
+        - 20% move → Rest of day halt
+        
+        Args:
+            symbol: Stock symbol
+        
+        Returns:
+            True if circuit breaker likely hit, False otherwise
+        """
+        try:
+            # Get recent price data
+            stock_df = self.fetcher.get_stock_data(symbol, period="2d", interval="1d")
+            if stock_df is None or len(stock_df) < 2:
+                return False
+            
+            current_price = stock_df['close'].iloc[-1]
+            previous_close = stock_df['close'].iloc[-2] if len(stock_df) >= 2 else stock_df['close'].iloc[0]
+            
+            if previous_close <= 0:
+                return False
+            
+            # Calculate percentage move
+            price_change_pct = abs((current_price - previous_close) / previous_close) * 100
+            
+            # Check if move exceeds circuit breaker thresholds
+            # If move > 10%, likely hit circuit breaker
+            if price_change_pct >= 10.0:
+                # Additional check: if price hasn't changed in last few minutes, likely halted
+                # For daily data, if current == previous and move was large, likely halted
+                if abs(current_price - previous_close) < 0.01 and price_change_pct >= 10.0:
+                    return True
+                # If move is exactly 10%, 15%, or 20%, likely circuit breaker
+                if price_change_pct in [10.0, 15.0, 20.0]:
+                    return True
+            
+            return False
+        
+        except Exception as e:
+            # If check fails, assume no circuit breaker (don't block scanning)
+            return False
+    
+    def is_near_circuit_breaker(self, symbol: str, threshold_pct: float = 8.0) -> bool:
+        """
+        Check if stock is near circuit breaker threshold
+        
+        Args:
+            symbol: Stock symbol
+            threshold_pct: Percentage move threshold (default 8%)
+        
+        Returns:
+            True if near circuit breaker, False otherwise
+        """
+        try:
+            stock_df = self.fetcher.get_stock_data(symbol, period="2d", interval="1d")
+            if stock_df is None or len(stock_df) < 2:
+                return False
+            
+            current_price = stock_df['close'].iloc[-1]
+            previous_close = stock_df['close'].iloc[-2] if len(stock_df) >= 2 else stock_df['close'].iloc[0]
+            
+            if previous_close <= 0:
+                return False
+            
+            price_change_pct = abs((current_price - previous_close) / previous_close) * 100
+            
+            # Near circuit breaker if move is 8-9% (approaching 10% threshold)
+            return threshold_pct <= price_change_pct < 10.0
+        
+        except Exception:
+            return False
 

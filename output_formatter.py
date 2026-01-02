@@ -12,7 +12,7 @@ class OutputFormatter:
     def format_picks(picks: List[Dict], date: str) -> str:
         """Format top picks in required format"""
         if not picks:
-            return "❌ No actionable setups today (min conviction 75/100 not met)"
+            return "❌ No actionable setups today (min conviction threshold not met)"
         
         output = [f"\n{'='*70}"]
         output.append(f"📊 TOP {len(picks)} STOCKS - {date}")
@@ -39,8 +39,17 @@ class OutputFormatter:
             reward_amount = abs(target - entry)
             rr_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
             
-            output.append(f"{i}. {symbol_clean} - {strategy}")
-            output.append(f"   Conviction: {conviction:.1f}/100 | Risk: {risk_label}")
+            # Add penny stock warning if applicable
+            is_penny = pick.get('is_penny_stock', False) or pick.get('features', {}).get('penny_stock', False)
+            penny_warning = " ⚠️ PENNY STOCK" if is_penny else ""
+            
+            # Add circuit breaker warning if applicable
+            near_cb = pick.get('features', {}).get('near_circuit_breaker', False)
+            cb_warning = " ⚠️ NEAR CIRCUIT BREAKER" if near_cb else ""
+            
+            output.append(f"{i}. {symbol_clean} - {strategy}{penny_warning}{cb_warning}")
+            risk_display = "HIGH RISK" if (is_penny or near_cb) else risk_label
+            output.append(f"   Conviction: {conviction:.1f}/100 | Risk: {risk_display}")
             output.append(f"   Entry: ₹{entry:.2f} | SL: ₹{sl:.2f} | Target: ₹{target:.2f}")
             # Get currency symbol from pick (default to ₹ for Indian stocks)
             currency = pick.get('currency_symbol', '₹')
@@ -95,6 +104,10 @@ class OutputFormatter:
             vol_pct = features.get('volatility_percentile', 0)
             potential = features.get('potential_move_pct', 0)
             return f"⚠️ High volatility ({vol_pct:.0f}th percentile), potential {potential:.1f}% move - EXPECT LARGE SWINGS"
+        
+        elif strategy == 'EARNINGS_DRIFT':
+            earnings_move = features.get('post_earnings_move_pct', 0)
+            return f"Post-earnings drift ({earnings_move:.1f}% move), positive earnings surprise"
         
         return "Technical setup confirmed"
     

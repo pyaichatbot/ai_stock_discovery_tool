@@ -33,10 +33,24 @@ class Config:
     HVB_MAX_PICKS: int = 1
     HVB_MIN_VOLATILITY_PERCENTILE: float = 90.0
     
+    # Penny Stock Mode (High Risk - Opt-in only)
+    PENNY_STOCK_MODE_ENABLED: bool = False
+    PENNY_STOCK_MIN_PRICE: float = 1.0  # Stocks below ₹50
+    PENNY_STOCK_MAX_PRICE: float = 50.0
+    PENNY_STOCK_MAX_PICKS: int = 2  # Limit exposure to penny stocks
+    PENNY_STOCK_MAX_RISK_PCT: float = 0.01  # 1% risk per trade (stricter than normal)
+    
     # Risk Management
     MAX_DAILY_LOSS_PCT: float = 0.05  # 5% of total budget
     MAX_CONCURRENT_POSITIONS: int = 5
     MAX_VOLATILITY_PERCENTILE: float = 95.0  # No trade if volatility > 95th percentile
+    
+    # Automation/Scheduling
+    AUTOMATION_ENABLED: bool = False
+    PRE_MARKET_SCAN_TIME: str = "09:00"  # IST
+    INTRADAY_REFRESH_INTERVAL: int = 30  # minutes
+    EOD_SUMMARY_TIME: str = "15:30"  # IST
+    WEEKLY_REVIEW_DAY: str = "sunday"
     
     # Learning Parameters
     MIN_TRADES_BEFORE_LEARNING: int = 10
@@ -45,7 +59,9 @@ class Config:
     WEIGHT_ADJUSTMENT_FULL: float = 0.20  # ±20%
     
     # Symbol Loading Configuration
-    # Options: 'nifty50', 'nifty100', 'nifty200', 'zerodha_popular', 'csv', 'manual'
+    # Options: 'nifty50', 'nifty100', 'nifty200', 'nifty500', 
+    #          'nifty_smallcap100', 'nifty_smallcap250', 'nifty_midcap150',
+    #          'zerodha_popular', 'csv', 'manual', 'penny_stocks'
     SYMBOL_SOURCE: str = 'nifty50'
     SYMBOL_CSV_PATH: str = 'symbols.csv'  # Used if SYMBOL_SOURCE = 'csv'
     REFRESH_SYMBOLS: bool = False  # Set True to force refresh from source
@@ -65,11 +81,15 @@ class Config:
             load_nifty50, 
             load_nifty100, 
             load_nifty200,
+            load_nifty_smallcap100,
+            load_nifty_smallcap250,
+            load_penny_stocks_from_price_filter,
             load_zerodha_popular,
             load_from_csv
         )
         
         print(f"📊 Loading symbols from: {self.SYMBOL_SOURCE}")
+        
         
         try:
             if self.SYMBOL_SOURCE == 'nifty50':
@@ -78,6 +98,16 @@ class Config:
                 symbols = load_nifty100()
             elif self.SYMBOL_SOURCE == 'nifty200':
                 symbols = load_nifty200()
+            elif self.SYMBOL_SOURCE == 'nifty_smallcap100':
+                symbols = load_nifty_smallcap100()
+            elif self.SYMBOL_SOURCE == 'nifty_smallcap250':
+                symbols = load_nifty_smallcap250()
+            elif self.SYMBOL_SOURCE == 'penny_stocks':
+                # Filter penny stocks by price from smallcap index
+                symbols = load_penny_stocks_from_price_filter(
+                    max_price=self.PENNY_STOCK_MAX_PRICE,
+                    source='nifty_smallcap250'
+                )
             elif self.SYMBOL_SOURCE == 'zerodha_popular':
                 symbols = load_zerodha_popular()
             elif self.SYMBOL_SOURCE == 'csv':
