@@ -76,6 +76,14 @@ class OutputFormatter:
                     diff = conviction - orig
                     output.append(f"      Original score: {orig:.1f} → Adjusted: {conviction:.1f} ({diff:+.1f})")
             
+            # Add multi-timeframe analysis if available
+            if 'multi_timeframe' in pick:
+                mtf = pick['multi_timeframe']
+                from multi_timeframe import MultiTimeframeAnalyzer
+                mtf_formatter = MultiTimeframeAnalyzer()
+                mtf_output = mtf_formatter.format_analysis(mtf)
+                output.append(mtf_output)
+            
             output.append("")  # Blank line between picks
         
         return "\n".join(output)
@@ -262,5 +270,69 @@ class OutputFormatter:
             output.append("\nBy Strategy:")
             for strategy, stats in strategy_stats.items():
                 output.append(f"  {strategy}: {stats['count']} picks, {stats['win_rate']:.1f}% win rate, {stats['avg_return']:.2f}% avg return")
+        
+        return "\n".join(output)
+    
+    @staticmethod
+    def format_backtest_result(result) -> str:
+        """Format backtest result for display"""
+        from backtesting import BacktestResult
+        
+        output = []
+        output.append(f"\n{'='*70}")
+        output.append(f"📊 BACKTEST RESULTS: {result.strategy}")
+        output.append(f"{'='*70}\n")
+        
+        output.append(f"Total Trades: {result.total_trades}")
+        output.append(f"Winning Trades: {result.winning_trades} | Losing Trades: {result.losing_trades}")
+        output.append(f"Win Rate: {result.win_rate:.1f}%")
+        output.append(f"")
+        output.append(f"Average Win: {result.avg_win:+.2f}%")
+        output.append(f"Average Loss: {result.avg_loss:.2f}%")
+        output.append(f"Expectancy: {result.expectancy:+.2f}% per trade")
+        output.append(f"")
+        output.append(f"Total Return: {result.total_return:+.2f}%")
+        output.append(f"Max Drawdown: {result.max_drawdown:.2f}%")
+        output.append(f"Sharpe Ratio: {result.sharpe_ratio:.2f}")
+        output.append(f"Profit Factor: {result.profit_factor:.2f}")
+        output.append(f"")
+        output.append(f"Best Trade: {result.best_trade:+.2f}%")
+        output.append(f"Worst Trade: {result.worst_trade:.2f}%")
+        output.append(f"{'='*70}\n")
+        
+        return "\n".join(output)
+    
+    @staticmethod
+    def format_backtest_comparison(results: Dict) -> str:
+        """Format strategy comparison for display"""
+        output = []
+        output.append(f"\n{'='*70}")
+        output.append(f"📊 STRATEGY COMPARISON")
+        output.append(f"{'='*70}\n")
+        
+        # Sort by total return
+        sorted_results = sorted(results.items(), key=lambda x: x[1].total_return, reverse=True)
+        
+        output.append(f"{'Strategy':<20} {'Win Rate':<12} {'Return':<12} {'Sharpe':<10} {'Expectancy':<12}")
+        output.append("-" * 70)
+        
+        for strategy, result in sorted_results:
+            win_rate_str = f"{result.win_rate:.1f}%"
+            return_str = f"{result.total_return:+.2f}%"
+            sharpe_str = f"{result.sharpe_ratio:.2f}"
+            expectancy_str = f"{result.expectancy:+.2f}%"
+            
+            output.append(f"{strategy:<20} {win_rate_str:<12} {return_str:<12} {sharpe_str:<10} {expectancy_str:<12}")
+        
+        output.append(f"\n{'='*70}\n")
+        
+        # Detailed stats for each
+        for strategy, result in sorted_results:
+            output.append(f"\n{strategy}:")
+            output.append(f"  Trades: {result.total_trades} | Win: {result.winning_trades} | Loss: {result.losing_trades}")
+            output.append(f"  Avg Win: {result.avg_win:+.2f}% | Avg Loss: {result.avg_loss:.2f}%")
+            output.append(f"  Max DD: {result.max_drawdown:.2f}% | Profit Factor: {result.profit_factor:.2f}")
+        
+        output.append(f"\n{'='*70}\n")
         
         return "\n".join(output)

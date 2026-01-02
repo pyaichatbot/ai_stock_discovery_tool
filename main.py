@@ -13,6 +13,8 @@ from scanner_engine import ScannerEngine
 from output_formatter import OutputFormatter
 from database import PickLedger
 from scheduler import AutomationScheduler
+from backtesting import BacktestingEngine
+from multi_timeframe import MultiTimeframeAnalyzer
 
 
 def cmd_scan(args, config: Config):
@@ -130,6 +132,60 @@ def cmd_schedule(args, config: Config):
         print("⚠️  Unknown schedule action. Use: enable, disable, or status")
 
 
+def cmd_backtest(args, config: Config):
+    """Run backtesting on strategies"""
+    from datetime import datetime, timedelta
+    from symbol_loader import load_nifty50
+    
+    # Parse period
+    period_str = args.period.lower()
+    if period_str.endswith('y'):
+        years = int(period_str[:-1])
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=years * 365)
+    elif period_str.endswith('m'):
+        months = int(period_str[:-1])
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=months * 30)
+    else:
+        print("❌ Invalid period format. Use: 1y, 2y, 6m, etc.")
+        return
+    
+    # Get symbols
+    if args.symbols:
+        symbols = [s if '.NS' in s else f"{s}.NS" for s in args.symbols]
+    else:
+        symbols = load_nifty50()[:10]  # Use first 10 for faster backtest
+    
+    # Initialize backtesting engine
+    engine = BacktestingEngine(config)
+    
+    if args.strategy and args.strategy != 'all':
+        # Backtest single strategy
+        print(f"🔄 Backtesting {args.strategy}...")
+        result = engine.backtest_strategy(
+            args.strategy.upper(),
+            symbols,
+            start_date,
+            end_date,
+            args.mode
+        )
+        
+        # Format and display results
+        from output_formatter import OutputFormatter
+        output = OutputFormatter.format_backtest_result(result)
+        print(output)
+    else:
+        # Compare all strategies
+        print(f"🔄 Comparing all strategies...")
+        results = engine.compare_strategies(symbols, start_date, end_date, args.mode)
+        
+        # Format and display comparison
+        from output_formatter import OutputFormatter
+        output = OutputFormatter.format_backtest_comparison(results)
+        print(output)
+
+
 def main():
     """Main entry point with CLI argument parsing"""
     
@@ -196,6 +252,15 @@ Examples:
     schedule_subparsers.add_parser('disable', help='Disable automation scheduler')
     schedule_subparsers.add_parser('status', help='Show scheduler status')
     
+    # Backtest command
+    backtest_parser = subparsers.add_parser('backtest', help='Backtest strategies on historical data')
+    backtest_parser.add_argument('--strategy', choices=['ORB', 'VWAP_PULLBACK', 'MOMENTUM_SWING', 'HVB', 'EARNINGS_DRIFT', 'all'],
+                                 default='all', help='Strategy to backtest (default: all)')
+    backtest_parser.add_argument('--period', default='1y', help='Backtest period (e.g., 1y, 2y, 6m)')
+    backtest_parser.add_argument('--mode', choices=['intraday', 'swing'], default='swing',
+                                 help='Trading mode (default: swing)')
+    backtest_parser.add_argument('--symbols', nargs='+', help='Specific symbols to test (default: NIFTY50 first 10)')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -216,6 +281,8 @@ Examples:
         cmd_review(args)
     elif args.command == 'schedule':
         cmd_schedule(args, config)
+    elif args.command == 'backtest':
+        cmd_backtest(args, config)
 
 
 if __name__ == "__main__":

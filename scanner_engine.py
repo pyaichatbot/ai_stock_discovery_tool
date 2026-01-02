@@ -20,6 +20,7 @@ from strategies.vwap_strategy import VWAPPullback
 from strategies.momentum_strategy import MomentumSwing
 from strategies.hvb_strategy import HighVolatilityBreakout
 from strategies.earnings_strategy import EarningsEventDrift
+from multi_timeframe import MultiTimeframeAnalyzer
 
 
 class ScannerEngine:
@@ -41,6 +42,7 @@ class ScannerEngine:
         self.momentum = MomentumSwing(config)
         self.hvb = HighVolatilityBreakout(config)
         self.earnings = EarningsEventDrift(config)
+        self.mtf_analyzer = MultiTimeframeAnalyzer()
     
     def scan_market(self, mode: str = "intraday", enable_hvb: bool = False, enable_penny_stock: bool = False) -> List[Dict]:
         """
@@ -273,6 +275,23 @@ class ScannerEngine:
                 best['features'] = {}
             best['features']['penny_stock'] = True
             best['is_penny_stock'] = True
+        
+        # Add multi-timeframe analysis
+        try:
+            mtf_analysis = self.mtf_analyzer.analyze(symbol)
+            best['multi_timeframe'] = mtf_analysis
+            
+            # Filter out if higher timeframes are bearish (optional - can be configurable)
+            # For now, just add it to features for display
+            if mtf_analysis['alignment'] == 'bearish' and mtf_analysis['alignment_strength'] >= 0.8:
+                # Strong bearish alignment - lower conviction
+                best['conviction_score'] = best['conviction_score'] * 0.8
+                if 'features' not in best:
+                    best['features'] = {}
+                best['features']['bearish_higher_timeframe'] = True
+        except Exception as e:
+            # If MTF analysis fails, continue without it
+            pass
         
         # Generate pick ID
         pick_id = f"{symbol.replace('.NS', '')}_{datetime.now().strftime('%Y%m%d_%H%M')}"
