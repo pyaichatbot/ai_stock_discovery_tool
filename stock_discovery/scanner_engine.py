@@ -69,7 +69,7 @@ class ScannerEngine:
         """
         print(f"🔍 Scanning {len(self.config.NIFTY_SYMBOLS)} stocks...")
         
-        # Penny stock mode warning
+        # Penny stock mode warning (only print once, config details handled by script)
         if enable_penny_stock:
             print("⚠️  PENNY STOCK MODE ENABLED - HIGH RISK")
             print("   • Stocks priced ₹1-50 only")
@@ -127,10 +127,11 @@ class ScannerEngine:
         if enable_penny_stock:
             penny_picks = [p for p in candidates if p.get('is_penny_stock', False)]
             normal_picks = [p for p in candidates if not p.get('is_penny_stock', False)]
-            # Limit penny stock picks
+            # Limit penny stock picks (engine enforces PENNY_STOCK_MAX_PICKS)
             penny_picks = penny_picks[:self.config.PENNY_STOCK_MAX_PICKS]
-            # Combine: penny stocks first (up to limit), then normal picks
-            top_picks = (penny_picks + normal_picks)[:self.config.TOP_N_PICKS]
+            # For penny stock mode, only return penny picks (not normal picks)
+            # This ensures we get pure penny stock suggestions
+            top_picks = penny_picks[:self.config.TOP_N_PICKS]
         else:
             top_picks = candidates[:self.config.TOP_N_PICKS]
         
@@ -147,12 +148,36 @@ class ScannerEngine:
         # Fetch data
         daily_df = self.fetcher.get_stock_data(symbol, period="60d", interval="1d")
         
-        if daily_df is None or len(daily_df) < 20:
-            return None
+        # Price history filter: Require at least 60-90 days for penny stocks (3-6 months)
+        # Normal stocks: at least 20 days (1 month)
+        min_days_required = 90 if enable_penny_stock else 20
+        if daily_df is None or len(daily_df) < min_days_required:
+            return None  # Filtered out: insufficient price history
         
         # Apply filters
         current_price = daily_df['close'].iloc[-1]
         avg_volume = daily_df['volume'].mean()
+        
+        # Calculate relative volume (today vs 20-day average) for intraday entries
+        if len(daily_df) >= 20:
+            recent_20d_avg_volume = daily_df['volume'].iloc[-20:].mean()
+            current_volume = daily_df['volume'].iloc[-1] if len(daily_df) > 0 else avg_volume
+            relative_volume = current_volume / recent_20d_avg_volume if recent_20d_avg_volume > 0 else 1.0
+        else:
+            relative_volume = 1.0
+        
+        # Pump/dump filter: Drop stocks with extreme gap-ups (>20-25%) on thin volume
+        # This is a classic pump profile - price spikes without volume confirmation
+        if len(daily_df) >= 2:
+            prev_close = daily_df['close'].iloc[-2]
+            price_change_pct = ((current_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
+            
+            # Check for extreme spike (>20% for penny stocks, >15% for normal)
+            spike_threshold = 20.0 if enable_penny_stock else 15.0
+            if price_change_pct > spike_threshold:
+                # If spike is on thin volume (relative volume < 1.5), it's likely a pump
+                if relative_volume < 1.5:
+                    return None  # Filtered out: pump pattern (extreme spike on thin volume)
         
         # Price filtering (different logic for penny stock mode)
         if enable_penny_stock:
@@ -170,13 +195,23 @@ class ScannerEngine:
         if avg_volume < self.config.MIN_AVG_VOLUME:
             return None
         
-        # Circuit breaker check: Skip stocks in trading halt
-        if self.market_context.is_circuit_breaker_hit(symbol):
-            return None  # Filtered out: circuit breaker hit
+        # Relative volume filter for intraday entries (penny stocks)
+        # Require rel_vol >= 2-3 for intraday entries to ensure liquidity
+        if enable_penny_stock and mode == "intraday":
+            min_relative_volume = 2.0  # Require 2x average volume for penny stock intraday entries
+            if relative_volume < min_relative_volume:
+                return None  # Filtered out: insufficient relative volume for intraday entry
         
         # Circuit breaker check: Skip stocks in trading halt
         if self.market_context.is_circuit_breaker_hit(symbol):
             return None  # Filtered out: circuit breaker hit
+        
+        # ASM/GSM check: Skip stocks under SEBI surveillance (ASM/GSM stages)
+        # Note: This requires external data source (NSE/BSE API) for real-time ASM/GSM status
+        # For now, we rely on circuit breaker checks which catch some of these cases
+        # TODO: Integrate ASM/GSM data source if available
+        # if self.market_context.is_asm_gsm_stock(symbol):
+        #     return None  # Filtered out: ASM/GSM surveillance stage
         
         # Risk management: Check if we can trade this symbol
         volatility_percentile = TechnicalIndicators.calculate_volatility_percentile(daily_df) if daily_df is not None else None
@@ -185,9 +220,28 @@ class ScannerEngine:
             return None  # Filtered out by risk management
         
         # Fundamental research: Check fundamentals before picking
+        # For penny stocks, use more lenient fundamental checks
         fundamental_check = self.fundamental_analyzer.analyze(symbol)
-        if not fundamental_check['allowed']:
-            return None  # Filtered out by fundamental analysis
+        if enable_penny_stock:
+            # For penny stocks, only apply hard filters (excessive debt, negative earnings)
+            # Skip score-based filtering as penny stocks often have lower fundamental scores
+            metrics = fundamental_check.get('metrics', {})
+            debt_to_equity = metrics.get('debt_to_equity')
+            if debt_to_equity is not None and debt_to_equity > 30.0:  # More lenient threshold
+                return None  # Filtered out: excessive debt
+            pe = metrics.get('pe_ratio')
+            if pe is not None and pe < -10.0:  # Only filter extreme losses
+                return None  # Filtered out: severe losses
+            
+            # Revenue check: Prefer names with non-zero revenues to avoid shells
+            # Check if revenue data is available and non-zero
+            revenue = metrics.get('revenue', None)
+            if revenue is not None and revenue <= 0:
+                return None  # Filtered out: zero or negative revenue (possible shell company)
+        else:
+            # Normal mode: apply full fundamental checks
+            if not fundamental_check['allowed']:
+                return None  # Filtered out by fundamental analysis
         
         # News filtering: Check for negative news and filter out if too negative
         try:
@@ -283,6 +337,13 @@ class ScannerEngine:
             position_size = risk_amount / risk_per_share
         else:
             position_size = 0
+        
+        # Debug logging for penny stock position sizing (helps tune stops)
+        if enable_penny_stock and self.config.LLM_ENABLED:  # Only log if LLM enabled (debug mode indicator)
+            import logging
+            logging.debug(f"Penny stock position sizing for {symbol}: "
+                         f"risk_amount={risk_amount:.2f}, risk_per_share={risk_per_share:.2f}, "
+                         f"position_size={position_size:.0f}, stop_pct={abs(risk_per_share/best['entry_price']*100):.1f}%")
         
         # Mark as penny stock in features
         if enable_penny_stock:

@@ -165,39 +165,69 @@ def main():
         print(f"📁 Daily folder: {daily_folder}")
         print()
         
-        # Clear ALL pending positions before scanning
-        # For daily scans, we want completely fresh picks each day
-        # This ensures we don't hit position limits from previous scans
+        # Clear old pending positions before scanning
+        # Only clear picks older than 7 days to preserve outcome data for recently traded picks
+        # This ensures we don't hit position limits while preserving trading history
         ledger = PickLedger()
         pending = ledger.get_picks_without_outcomes()
         cleared_count = 0
+        from datetime import datetime, timedelta
         
-        # Clear all pending positions to start fresh
+        cutoff_date = datetime.now() - timedelta(days=7)  # Clear picks older than 7 days
+        
         for pick in pending:
-            ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
-            cleared_count += 1
+            pick_time = datetime.fromisoformat(pick['timestamp'])
+            # Only clear picks older than cutoff date (preserves recent trading data)
+            if pick_time < cutoff_date:
+                ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
+                cleared_count += 1
         
         if cleared_count > 0:
-            print(f"🧹 Cleared {cleared_count} pending positions from previous scans")
-            print("   (Daily scans start fresh each day)")
+            print(f"🧹 Cleared {cleared_count} pending positions older than 7 days")
+            print("   (Preserving recent picks to maintain trading history)")
             print()
         
-        # Initialize with penny stock config
-        config = ConfigManager.create_config(enable_penny_stock=True)
+        # Initialize with penny stock profile (base profile + Perplexity optimizations)
+        # Base profile sets: SYMBOL_SOURCE, PENNY_STOCK_MODE_ENABLED, MIN_AVG_VOLUME=10000
+        config = ConfigManager.create_config(profile='penny_stock')
         
-        # Apply optimized settings for daily scans
-        config.MIN_CONVICTION_SCORE = 55.0  # Lower threshold to find more opportunities
-        config.MAX_CONCURRENT_POSITIONS = 10  # Higher limit for daily scans
-        print(f"🔧 Using optimized settings: MIN_CONVICTION={config.MIN_CONVICTION_SCORE}, MAX_POSITIONS={config.MAX_CONCURRENT_POSITIONS}")
+        # Apply Perplexity-suggested optimized settings (overrides base profile)
+        # Focus on higher quality penny stocks with better liquidity
+        # Price band
+        config.PENNY_STOCK_MIN_PRICE = 1.0
+        config.PENNY_STOCK_MAX_PRICE = 50.0
+        
+        # Quality & signal strength - target 0-3 picks/day (override base 50.0)
+        config.MIN_CONVICTION_SCORE = 55.0
+        
+        # Liquidity - tighter requirements for better execution (override base 10000)
+        config.MIN_AVG_VOLUME = 150_000  # Higher volume for better liquidity
+        
+        # Volatility constraints - prevent extreme volatility
+        config.MAX_VOLATILITY_PERCENTILE = 92.0
+        
+        # Portfolio / concurrency
+        config.MAX_CONCURRENT_POSITIONS = 5
+        
+        # Align PENNY_STOCK_MAX_PICKS with script's top-3 limit
+        config.PENNY_STOCK_MAX_PICKS = 3  # Engine enforces this, script keeps [:3] as safety net
+        
+        print(f"🔧 Using Perplexity-optimized settings for penny stocks:")
+        print(f"   • Price Range: ₹{config.PENNY_STOCK_MIN_PRICE} - ₹{config.PENNY_STOCK_MAX_PRICE}")
+        print(f"   • MIN_CONVICTION: {config.MIN_CONVICTION_SCORE} (target 0-3 picks/day)")
+        print(f"   • MIN_AVG_VOLUME: {config.MIN_AVG_VOLUME:,} (tighter liquidity requirement)")
+        print(f"   • MAX_VOLATILITY: {config.MAX_VOLATILITY_PERCENTILE}th percentile (prevent extremes)")
+        print(f"   • MAX_POSITIONS: {config.MAX_CONCURRENT_POSITIONS}")
+        print(f"   • MAX_PENNY_PICKS: {config.PENNY_STOCK_MAX_PICKS}")
         print()
         
         scanner = ScannerEngine(config)
         
         # Run scan (intraday mode, penny stocks enabled)
-        print("🔍 Scanning market for penny stocks...")
+        # Engine already enforces PENNY_STOCK_MAX_PICKS=3, but keep [:3] as safety net
         picks = scanner.scan_market(mode='intraday', enable_hvb=False, enable_penny_stock=True)
         
-        # Limit to top 3
+        # Safety net: Limit to top 3 (engine should already enforce this via PENNY_STOCK_MAX_PICKS)
         picks = picks[:3]
         
         print(f"\n📈 Found {len(picks)} penny stock picks")
@@ -219,7 +249,7 @@ def main():
         print("\n\n⚠️  Interrupted by user")
         return 1
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n❌ Error: {type(e).__name__}: {repr(e)}")
         import traceback
         traceback.print_exc()
         return 1

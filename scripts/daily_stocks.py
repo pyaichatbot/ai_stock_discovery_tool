@@ -195,7 +195,7 @@ def main():
         print("\n\n⚠️  Interrupted by user")
         return 1
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n❌ Error: {type(e).__name__}: {repr(e)}")
         import traceback
         traceback.print_exc()
         return 1
