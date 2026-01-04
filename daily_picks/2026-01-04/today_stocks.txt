@@ -1,0 +1,12 @@
+
+======================================================================
+📊 TOP 3 STOCKS - Jan 04, 2026
+======================================================================
+
+❌ No actionable setups today (min conviction threshold not met)
+
+Possible reasons:
+• Market regime not favorable
+• No stocks met minimum conviction threshold
+• Risk management limits reached
+• Adjust filters in config.py if needed
