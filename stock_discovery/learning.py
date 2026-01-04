@@ -5,8 +5,8 @@ Phase 3: Feedback Learning Loop
 
 import numpy as np
 from typing import Dict, List
-from database import PickLedger
-from config import Config
+from .database import PickLedger
+from .config import Config
 
 
 class LearningEngine:

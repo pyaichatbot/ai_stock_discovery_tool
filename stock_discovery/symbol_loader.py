@@ -20,9 +20,18 @@ class SymbolLoader:
     CACHE_FILE = "symbols_cache.pkl"
     CACHE_DURATION_DAYS = 7  # Refresh weekly
     
-    def __init__(self, cache_dir: str = "."):
-        self.cache_dir = cache_dir
-        self.cache_path = os.path.join(cache_dir, self.CACHE_FILE)
+    def __init__(self, cache_dir: str = None):
+        if cache_dir is None:
+            # Default to data/ directory, fallback to current dir for compatibility
+            project_root = os.path.dirname(os.path.dirname(__file__))
+            data_dir = os.path.join(project_root, "data")
+            if os.path.exists(data_dir) or os.path.exists(os.path.join(project_root, "data")):
+                self.cache_dir = data_dir
+            else:
+                self.cache_dir = "."  # Fallback for backward compatibility
+        else:
+            self.cache_dir = cache_dir
+        self.cache_path = os.path.join(self.cache_dir, self.CACHE_FILE)
     
     def get_symbols(self, source: str = "nifty50", refresh: bool = False) -> List[str]:
         """

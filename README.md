@@ -34,13 +34,22 @@ pip install -r requirements.txt
 
 ```bash
 # Intraday scan (default)
-python main.py scan --mode intraday
+python scripts/main.py scan --mode intraday
 
 # Swing trading scan
-python main.py scan --mode swing
+python scripts/main.py scan --mode swing
 
 # Enable HIGH RISK HVB mode (opt-in)
-python main.py scan --mode intraday --hvb
+python scripts/main.py scan --mode intraday --hvb
+
+# Scan with config overrides (no need to edit config.py)
+python scripts/main.py scan --mode intraday --min-conviction 55 --max-positions 10
+
+# View active positions
+python scripts/main.py positions
+
+# Clear old positions (>30 days)
+python scripts/main.py positions --clear-old
 ```
 
 **Output Example:**
@@ -66,14 +75,14 @@ After executing or reviewing picks, provide feedback:
 
 ```bash
 # If you took the trade
-python main.py feedback \
+python scripts/main.py feedback \
   --pick-id RELIANCE_20241230_0930 \
   --took yes \
   --rating 4 \
   --note "Entry was clean, hit first target"
 
 # If you rejected the trade
-python main.py feedback \
+python scripts/main.py feedback \
   --pick-id TCS_20241230_0945 \
   --took no \
   --rating 2 \
@@ -86,7 +95,7 @@ python main.py feedback \
 Run this after market close to update learning:
 
 ```bash
-python main.py compute-outcomes
+python scripts/main.py compute-outcomes
 ```
 
 This will:
@@ -99,15 +108,44 @@ This will:
 
 ```bash
 # Weekly review
-python main.py review --period week
+python scripts/main.py review --period week
 
 # Monthly review
-python main.py review --period month
+python scripts/main.py review --period month
 ```
 
 ## Configuration
 
-Edit `config.py` to customize:
+### Command-Line Overrides (Recommended)
+
+You can override config settings via command-line arguments without editing files:
+
+```bash
+# Override conviction threshold and position limit
+python scripts/main.py scan --mode intraday --min-conviction 55 --max-positions 10
+
+# Override volume and price filters
+python scripts/main.py scan --mode intraday --min-volume 50000 --min-price 100 --max-price 3000
+
+# Override number of picks returned
+python scripts/main.py scan --mode intraday --top-n 5
+
+# Ignore position limit (use with caution)
+python scripts/main.py scan --mode intraday --ignore-position-limit
+```
+
+**Available overrides:**
+- `--min-conviction SCORE` - Override MIN_CONVICTION_SCORE (default: 60.0)
+- `--max-positions N` - Override MAX_CONCURRENT_POSITIONS (default: 5)
+- `--min-volume VOLUME` - Override MIN_AVG_VOLUME (default: 100000)
+- `--min-price PRICE` - Override MIN_PRICE (default: 50.0)
+- `--max-price PRICE` - Override MAX_PRICE (default: 5000.0)
+- `--top-n N` - Override TOP_N_PICKS (default: 3)
+- `--ignore-position-limit` - Ignore max concurrent positions limit
+
+### Editing config.py (Alternative)
+
+Edit `stock_discovery/config.py` to customize default values:
 
 ```python
 # Trading Parameters
@@ -212,7 +250,7 @@ All data stored in `picks_ledger.db` (SQLite):
 
 **Backup:**
 ```bash
-cp picks_ledger.db picks_ledger_backup_$(date +%Y%m%d).db
+cp data/picks_ledger.db data/picks_ledger_backup_$(date +%Y%m%d).db
 ```
 
 ## Safety & Disclaimers
@@ -228,7 +266,10 @@ cp picks_ledger.db picks_ledger_backup_$(date +%Y%m%d).db
 
 ### No picks generated
 - Check market regime (bearish markets = fewer setups)
-- Lower `MIN_CONVICTION_SCORE` in config
+- Lower conviction threshold: `--min-conviction 55` or edit `config.py`
+- Check active positions: `python scripts/main.py positions`
+- Clear old positions: `python scripts/main.py positions --clear-old`
+- Increase position limit: `--max-positions 10`
 - Check if stocks meet filters (price, volume)
 
 ### Data fetch errors
@@ -247,7 +288,17 @@ cp picks_ledger.db picks_ledger_backup_$(date +%Y%m%d).db
 
 1. **Pre-market** (9:00 AM)
    ```bash
-   python main.py scan --mode intraday
+   # Check active positions first
+   python scripts/main.py positions
+   
+   # Clear old positions if needed
+   python scripts/main.py positions --clear-old
+   
+   # Run scan with optimized settings
+   python scripts/main.py scan --mode intraday --min-conviction 55 --max-positions 10
+   
+   # Or use daily scripts (automatically use optimized settings)
+   python scripts/daily_stocks.py
    ```
 
 2. **Review picks** - Decide which to execute
@@ -257,36 +308,46 @@ cp picks_ledger.db picks_ledger_backup_$(date +%Y%m%d).db
 4. **End of day** (3:30 PM)
    ```bash
    # Add feedback for each pick
-   python main.py feedback --pick-id <id> --took yes --rating 4
+   python scripts/main.py feedback --pick-id <id> --took yes --rating 4
    
    # Compute outcomes
-   python main.py compute-outcomes
+   python scripts/main.py compute-outcomes
    ```
 
 5. **Weekly review** (Friday)
    ```bash
-   python main.py review --period week
+   python scripts/main.py review --period week
    ```
 
 ## Files Structure
 
 ```
-stock_discovery/
-├── main.py                    # Entry point
-├── config.py                  # Configuration
-├── database.py                # SQLite operations
-├── data_fetcher.py            # Market data
-├── technical_indicators.py    # TA calculations
-├── learning.py                # Feedback learning
-├── scanner_engine.py          # Main orchestrator
-├── output_formatter.py        # Display formatting
-├── strategies/
-│   ├── orb_strategy.py       # Opening Range Breakout
-│   ├── vwap_strategy.py      # VWAP Pullback
-│   ├── momentum_strategy.py  # Momentum Swing
-│   └── hvb_strategy.py       # High Volatility Breakout
-├── requirements.txt           # Dependencies
-└── picks_ledger.db           # Database (created on first run)
+ai_stock_discovery_tool/
+├── stock_discovery/           # Core package
+│   ├── config.py             # Configuration
+│   ├── database.py           # SQLite operations
+│   ├── data_fetcher.py       # Market data
+│   ├── technical_indicators.py  # TA calculations
+│   ├── learning.py           # Feedback learning
+│   ├── scanner_engine.py     # Main orchestrator
+│   ├── output_formatter.py   # Display formatting
+│   └── strategies/           # Trading strategies
+│       ├── orb_strategy.py
+│       ├── vwap_strategy.py
+│       ├── momentum_strategy.py
+│       └── hvb_strategy.py
+├── scripts/                  # Entry point scripts
+│   ├── main.py              # Main CLI tool
+│   ├── daily_stocks.py      # Daily regular stocks scan
+│   └── daily_penny_stocks.py # Daily penny stocks scan
+├── data/                     # Data files
+│   ├── picks_ledger.db      # Database
+│   └── symbols_cache.pkl   # Symbol cache
+├── docs/                     # Documentation
+├── tests/                    # Test files
+├── daily_picks/             # Output directory
+├── requirements.txt          # Dependencies
+└── run_daily_scans.sh       # Daily scan runner
 ```
 
 ## Future Enhancements

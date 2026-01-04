@@ -7,9 +7,9 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-from config import Config
-from technical_indicators import TechnicalIndicators
-from scoring_engine import ScoringEngine
+from ..config import Config
+from ..technical_indicators import TechnicalIndicators
+from ..scoring_engine import ScoringEngine
 
 
 class OpeningRangeBreakout:

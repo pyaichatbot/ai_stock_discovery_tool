@@ -6,7 +6,7 @@ Supports: CLI overrides, environment variables, preset profiles
 import os
 from typing import Optional, Dict, Any
 from dataclasses import fields
-from config import Config
+from .config import Config
 
 
 class ConfigManager:

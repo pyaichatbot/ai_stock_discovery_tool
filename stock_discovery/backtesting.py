@@ -8,14 +8,14 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
-from config import Config
-from data_fetcher import MarketDataFetcher
-from scanner_engine import ScannerEngine
-from strategies.orb_strategy import OpeningRangeBreakout
-from strategies.vwap_strategy import VWAPPullback
-from strategies.momentum_strategy import MomentumSwing
-from strategies.hvb_strategy import HighVolatilityBreakout
-from strategies.earnings_strategy import EarningsEventDrift
+from .config import Config
+from .data_fetcher import MarketDataFetcher
+from .scanner_engine import ScannerEngine
+from .strategies.orb_strategy import OpeningRangeBreakout
+from .strategies.vwap_strategy import VWAPPullback
+from .strategies.momentum_strategy import MomentumSwing
+from .strategies.hvb_strategy import HighVolatilityBreakout
+from .strategies.earnings_strategy import EarningsEventDrift
 
 
 @dataclass

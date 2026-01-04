@@ -6,7 +6,7 @@ Implements 7-dimension scoring system per PRD Section 7
 import numpy as np
 import pandas as pd
 from typing import Dict, Optional
-from technical_indicators import TechnicalIndicators
+from .technical_indicators import TechnicalIndicators
 
 
 class ScoringEngine:

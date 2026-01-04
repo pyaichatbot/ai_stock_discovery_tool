@@ -6,7 +6,7 @@ Index confirmation, sector analysis, relative strength
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional
-from data_fetcher import MarketDataFetcher
+from .data_fetcher import MarketDataFetcher
 
 
 class MarketContext:

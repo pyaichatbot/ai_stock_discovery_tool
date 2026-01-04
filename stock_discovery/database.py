@@ -11,8 +11,17 @@ import json
 class PickLedger:
     """SQLite-based storage for picks, feedback, outcomes, and learning"""
     
-    def __init__(self, db_path: str = "picks_ledger.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            import os
+            # Default to data/picks_ledger.db, fallback to current dir for compatibility
+            data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "picks_ledger.db")
+            if os.path.exists(data_path) or os.path.exists(os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")):
+                self.db_path = data_path
+            else:
+                self.db_path = "picks_ledger.db"  # Fallback for backward compatibility
+        else:
+            self.db_path = db_path
         self._init_db()
     
     def _init_db(self):

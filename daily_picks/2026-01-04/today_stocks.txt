@@ -3,10 +3,47 @@
 📊 TOP 3 STOCKS - Jan 04, 2026
 ======================================================================
 
-❌ No actionable setups today (min conviction threshold not met)
+1. KOTAKBANK - MOMENTUM_SWING
+   Conviction: 76.4/100 | Risk: Medium Risk
+   Entry: ₹2195.10 | SL: ₹2140.74 | Target: ₹2273.27
+   Position Size: ₹404 (0 shares)
+   Risk/Reward: 1:1.44
+   📊 Fundamentals: Score: 55.0/100 | P/E: 23.5 | P/B: 2.60 | ROE: 11.8% | Rev: -12.4%
+   Setup: MA crossover, RSI 55, rising volume
+📊 Multi-Timeframe Analysis:
+   Daily:   BULLISH  🟢 | RSI: 54.7 | Price: ₹2195.10
+   Weekly:  BULLISH  🟢 | RSI: 70.6 | Price: ₹2195.10
+   Monthly: BULLISH  🟢 | RSI: 69.4 | Price: ₹2195.10
+   → Alignment: BULLISH ✅ (Strength: 100%)
+   → Nearest Support: ₹2093.33 (weekly)
+   → Nearest Resistance: ₹2299.25 (monthly)
 
-Possible reasons:
-• Market regime not favorable
-• No stocks met minimum conviction threshold
-• Risk management limits reached
-• Adjust filters in config.py if needed
+2. TATACONSUM - MOMENTUM_SWING
+   Conviction: 73.2/100 | Risk: Medium Risk
+   Entry: ₹1170.70 | SL: ₹1151.84 | Target: ₹1225.02
+   Position Size: ₹621 (1 shares)
+   Risk/Reward: 1:2.88
+   📊 Fundamentals: Score: 50.0/100 | P/E: 84.8 | P/B: 5.70 | D/E: 11.87 | ROE: 6.5% | Rev: +17.8%
+   Setup: MA crossover, RSI 55, rising volume
+📊 Multi-Timeframe Analysis:
+   Daily:   BULLISH  🟢 | RSI: 54.9 | Price: ₹1170.70
+   Weekly:  BULLISH  🟢 | RSI: 62.4 | Price: ₹1170.70
+   Monthly: BULLISH  🟢 | RSI: 66.7 | Price: ₹1170.70
+   → Alignment: BULLISH ✅ (Strength: 100%)
+   → Nearest Support: ₹1142.25 (weekly)
+   → Nearest Resistance: ₹1237.92 (monthly)
+
+3. TCS - MOMENTUM_SWING
+   Conviction: 72.0/100 | Risk: Medium Risk
+   Entry: ₹3250.70 | SL: ₹3211.75 | Target: ₹3365.11
+   Position Size: ₹835 (0 shares)
+   Risk/Reward: 1:2.94
+   📊 Fundamentals: Score: 70.0/100 | P/E: 23.8 | P/B: 11.05 | D/E: 10.17 | ROE: 47.4% | Rev: +2.4%
+   Setup: MA crossover, RSI 53, rising volume
+📊 Multi-Timeframe Analysis:
+   Daily:   BULLISH  🟢 | RSI: 53.1 | Price: ₹3250.70
+   Weekly:  NEUTRAL  🟡 | RSI: 73.8 | Price: ₹3250.70
+   Monthly: NEUTRAL  🟡 | RSI: 28.4 | Price: ₹3250.70
+   → Alignment: NEUTRAL ⚠️ (Strength: 50%)
+   → Nearest Support: ₹3558.06 (monthly)
+   → Nearest Resistance: ₹4427.08 (monthly)

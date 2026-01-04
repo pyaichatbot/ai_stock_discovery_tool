@@ -5,8 +5,8 @@ Kill-switches, no-trade conditions, position limits
 
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
-from database import PickLedger
-from config import Config
+from .database import PickLedger
+from .config import Config
 
 
 class RiskManager:

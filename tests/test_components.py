@@ -6,38 +6,38 @@ import sys
 import os
 
 # Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_imports():
     """Test that all modules import correctly"""
     print("Testing imports...")
     
     try:
-        from config import Config
+        from stock_discovery.config import Config
         print("  ✓ config")
         
-        from database import PickLedger
+        from stock_discovery.database import PickLedger
         print("  ✓ database")
         
-        from data_fetcher import MarketDataFetcher
+        from stock_discovery.data_fetcher import MarketDataFetcher
         print("  ✓ data_fetcher")
         
-        from technical_indicators import TechnicalIndicators
+        from stock_discovery.technical_indicators import TechnicalIndicators
         print("  ✓ technical_indicators")
         
-        from learning import LearningEngine
+        from stock_discovery.learning import LearningEngine
         print("  ✓ learning")
         
-        from strategies.orb_strategy import OpeningRangeBreakout
-        from strategies.vwap_strategy import VWAPPullback
-        from strategies.momentum_strategy import MomentumSwing
-        from strategies.hvb_strategy import HighVolatilityBreakout
+        from stock_discovery.strategies.orb_strategy import OpeningRangeBreakout
+        from stock_discovery.strategies.vwap_strategy import VWAPPullback
+        from stock_discovery.strategies.momentum_strategy import MomentumSwing
+        from stock_discovery.strategies.hvb_strategy import HighVolatilityBreakout
         print("  ✓ all strategies")
         
-        from scanner_engine import ScannerEngine
+        from stock_discovery.scanner_engine import ScannerEngine
         print("  ✓ scanner_engine")
         
-        from output_formatter import OutputFormatter
+        from stock_discovery.output_formatter import OutputFormatter
         print("  ✓ output_formatter")
         
         print("\n✅ All imports successful!")

@@ -53,7 +53,7 @@ echo ""
 # Run daily stocks script
 echo "📈 Running daily_stocks.py..."
 echo "----------------------------------------------------------------------"
-python "$PROJECT_ROOT/scripts/daily_stocks.py"
+python scripts/daily_stocks.py
 STOCKS_EXIT_CODE=$?
 
 echo ""
@@ -70,7 +70,7 @@ echo ""
 # Run daily penny stocks script
 echo "💰 Running daily_penny_stocks.py..."
 echo "----------------------------------------------------------------------"
-python "$PROJECT_ROOT/scripts/daily_penny_stocks.py"
+python scripts/daily_penny_stocks.py
 PENNY_EXIT_CODE=$?
 
 echo ""

@@ -10,17 +10,23 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from config import Config
-from config_manager import ConfigManager
-from scanner_engine import ScannerEngine
-from output_formatter import OutputFormatter
+# Add parent directory to path to allow imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from stock_discovery.config import Config
+from stock_discovery.config_manager import ConfigManager
+from stock_discovery.scanner_engine import ScannerEngine
+from stock_discovery.output_formatter import OutputFormatter
+from stock_discovery.database import PickLedger
 
 
 def create_daily_folder() -> Path:
     """Create daily folder structure: daily_picks/YYYY-MM-DD/"""
     today = datetime.now()
     folder_name = today.strftime("%Y-%m-%d")
-    daily_folder = Path("daily_picks") / folder_name
+    # Create in project root (parent of scripts/)
+    project_root = Path(__file__).parent.parent
+    daily_folder = project_root / "daily_picks" / folder_name
     daily_folder.mkdir(parents=True, exist_ok=True)
     return daily_folder
 
@@ -112,9 +118,24 @@ def save_json_output(picks: list, folder: Path, filename: str = "today_penny_sto
             reward_amount = abs(target - entry)
             pick_data['risk_reward_ratio'] = reward_amount / risk_amount if risk_amount > 0 else 0
         
-        # Add features if available
+        # Add features if available (convert to JSON-serializable format)
         if 'features' in pick:
-            pick_data['features'] = pick.get('features', {})
+            features = pick.get('features', {})
+            # Convert numpy types and other non-serializable types
+            import numpy as np
+            serializable_features = {}
+            for k, v in features.items():
+                if isinstance(v, (np.integer, np.int64)):
+                    serializable_features[k] = int(v)
+                elif isinstance(v, (np.floating, np.float64)):
+                    serializable_features[k] = float(v)
+                elif isinstance(v, np.ndarray):
+                    serializable_features[k] = v.tolist()
+                elif isinstance(v, (bool, int, float, str)) or v is None:
+                    serializable_features[k] = v
+                else:
+                    serializable_features[k] = str(v)  # Fallback to string
+            pick_data['features'] = serializable_features
         
         json_data['picks'].append(pick_data)
     
@@ -144,8 +165,36 @@ def main():
         print(f"📁 Daily folder: {daily_folder}")
         print()
         
+        # Clear positions from previous days before scanning
+        # For daily scans, we want fresh picks each day
+        ledger = PickLedger()
+        pending = ledger.get_picks_without_outcomes()
+        cleared_count = 0
+        from datetime import datetime
+        today = datetime.now().date()
+        
+        for pick in pending:
+            pick_time = datetime.fromisoformat(pick['timestamp'])
+            pick_date = pick_time.date()
+            
+            # Clear all positions not from today
+            if pick_date < today:
+                ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
+                cleared_count += 1
+        
+        if cleared_count > 0:
+            print(f"🧹 Cleared {cleared_count} positions from previous days")
+            print()
+        
         # Initialize with penny stock config
         config = ConfigManager.create_config(enable_penny_stock=True)
+        
+        # Apply optimized settings for daily scans
+        config.MIN_CONVICTION_SCORE = 55.0  # Lower threshold to find more opportunities
+        config.MAX_CONCURRENT_POSITIONS = 10  # Higher limit for daily scans
+        print(f"🔧 Using optimized settings: MIN_CONVICTION={config.MIN_CONVICTION_SCORE}, MAX_POSITIONS={config.MAX_CONCURRENT_POSITIONS}")
+        print()
+        
         scanner = ScannerEngine(config)
         
         # Run scan (intraday mode, penny stocks enabled)

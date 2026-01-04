@@ -79,7 +79,7 @@ class OutputFormatter:
             # Add multi-timeframe analysis if available
             if 'multi_timeframe' in pick:
                 mtf = pick['multi_timeframe']
-                from multi_timeframe import MultiTimeframeAnalyzer
+                from .multi_timeframe import MultiTimeframeAnalyzer
                 mtf_formatter = MultiTimeframeAnalyzer()
                 mtf_output = mtf_formatter.format_analysis(mtf)
                 output.append(mtf_output)

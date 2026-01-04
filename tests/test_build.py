@@ -4,15 +4,18 @@ Build verification script - Tests core functionality without full market scan
 """
 
 import sys
-from config import Config
-from database import PickLedger
-from data_fetcher import MarketDataFetcher
-from scanner_engine import ScannerEngine
-from learning import LearningEngine
-from output_formatter import OutputFormatter
-from technical_indicators import TechnicalIndicators
-from scoring_engine import ScoringEngine
-from news_fetcher import NewsFetcher
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from stock_discovery.config import Config
+from stock_discovery.database import PickLedger
+from stock_discovery.data_fetcher import MarketDataFetcher
+from stock_discovery.scanner_engine import ScannerEngine
+from stock_discovery.learning import LearningEngine
+from stock_discovery.output_formatter import OutputFormatter
+from stock_discovery.technical_indicators import TechnicalIndicators
+from stock_discovery.scoring_engine import ScoringEngine
+from stock_discovery.news_fetcher import NewsFetcher
 
 def test_imports():
     """Test all imports"""

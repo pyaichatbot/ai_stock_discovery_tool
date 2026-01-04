@@ -7,14 +7,19 @@ import sys
 import argparse
 from datetime import datetime
 
-from config import Config
-from config_manager import ConfigManager
-from scanner_engine import ScannerEngine
-from output_formatter import OutputFormatter
-from database import PickLedger
-from scheduler import AutomationScheduler
-from backtesting import BacktestingEngine
-from multi_timeframe import MultiTimeframeAnalyzer
+import sys
+import os
+# Add parent directory to path to allow imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from stock_discovery.config import Config
+from stock_discovery.config_manager import ConfigManager
+from stock_discovery.scanner_engine import ScannerEngine
+from stock_discovery.output_formatter import OutputFormatter
+from stock_discovery.database import PickLedger
+from stock_discovery.scheduler import AutomationScheduler
+from stock_discovery.backtesting import BacktestingEngine
+from stock_discovery.multi_timeframe import MultiTimeframeAnalyzer
 
 
 def cmd_scan(args, config: Config):
@@ -32,6 +37,41 @@ def cmd_scan(args, config: Config):
             enable_penny_stock=enable_penny_stock,
             enable_hvb=enable_hvb
         )
+    
+    # Apply command-line config overrides
+    config_overrides = {}
+    if hasattr(args, 'min_conviction') and args.min_conviction is not None:
+        config.MIN_CONVICTION_SCORE = args.min_conviction
+        print(f"🔧 Override: MIN_CONVICTION_SCORE = {args.min_conviction}")
+    
+    if hasattr(args, 'max_positions') and args.max_positions is not None:
+        config.MAX_CONCURRENT_POSITIONS = args.max_positions
+        print(f"🔧 Override: MAX_CONCURRENT_POSITIONS = {args.max_positions}")
+    
+    if hasattr(args, 'min_volume') and args.min_volume is not None:
+        config.MIN_AVG_VOLUME = args.min_volume
+        print(f"🔧 Override: MIN_AVG_VOLUME = {args.min_volume}")
+    
+    if hasattr(args, 'min_price') and args.min_price is not None:
+        config.MIN_PRICE = args.min_price
+        print(f"🔧 Override: MIN_PRICE = {args.min_price}")
+    
+    if hasattr(args, 'max_price') and args.max_price is not None:
+        config.MAX_PRICE = args.max_price
+        print(f"🔧 Override: MAX_PRICE = {args.max_price}")
+    
+    if hasattr(args, 'top_n') and args.top_n is not None:
+        config.TOP_N_PICKS = args.top_n
+        print(f"🔧 Override: TOP_N_PICKS = {args.top_n}")
+    
+    if hasattr(args, 'ignore_position_limit') and args.ignore_position_limit:
+        config.MAX_CONCURRENT_POSITIONS = 999  # Effectively disable limit
+        print("🔧 Override: Ignoring position limit (MAX_CONCURRENT_POSITIONS = 999)")
+    
+    if any([hasattr(args, k) and getattr(args, k) is not None 
+            for k in ['min_conviction', 'max_positions', 'min_volume', 'min_price', 'max_price', 'top_n']]) or \
+       (hasattr(args, 'ignore_position_limit') and args.ignore_position_limit):
+        print()
     
     scanner = ScannerEngine(config)
     formatter = OutputFormatter()
@@ -117,6 +157,94 @@ def cmd_review(args):
     print(output)
 
 
+def cmd_positions(args):
+    """View and manage active positions"""
+    from datetime import datetime
+    ledger = PickLedger()
+    
+    if args.clear_all:
+        # Clear all pending positions by adding dummy outcomes
+        pending = ledger.get_picks_without_outcomes()
+        if not pending:
+            print("✅ No pending positions to clear")
+            return
+        
+        confirm = input(f"⚠️  Are you sure you want to clear {len(pending)} pending positions? (yes/no): ")
+        if confirm.lower() != 'yes':
+            print("❌ Cancelled")
+            return
+        
+        for pick in pending:
+            ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
+        print(f"✅ Cleared {len(pending)} pending positions")
+        return
+    
+    if args.clear_old:
+        # Mark old positions (>30 days) as inactive
+        pending = ledger.get_picks_without_outcomes()
+        old_count = 0
+        for pick in pending:
+            pick_time = datetime.fromisoformat(pick['timestamp'])
+            days_old = (datetime.now() - pick_time).days
+            if days_old > 30:
+                ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
+                old_count += 1
+        
+        if old_count > 0:
+            print(f"✅ Cleared {old_count} old positions (>30 days)")
+        else:
+            print("✅ No old positions to clear")
+        return
+    
+    # Default: list active positions
+    pending = ledger.get_picks_without_outcomes()
+    
+    if not pending:
+        print("✅ No active positions")
+        return
+    
+    print("=" * 70)
+    print(f"📊 ACTIVE POSITIONS ({len(pending)})")
+    print("=" * 70)
+    print()
+    
+    # Group by strategy and count by age
+    intraday_count = 0
+    swing_count = 0
+    
+    for pick in pending:
+        pick_time = datetime.fromisoformat(pick['timestamp'])
+        days_old = (datetime.now() - pick_time).days
+        
+        symbol = pick['symbol'].replace('.NS', '')
+        strategy = pick['strategy']
+        entry = pick['entry_price']
+        sl = pick['stop_loss']
+        target = pick['target_price']
+        
+        if strategy in ['ORB', 'VWAP_PULLBACK']:
+            if days_old <= 1:
+                intraday_count += 1
+        else:
+            if days_old <= 30:
+                swing_count += 1
+        
+        age_str = f"{days_old} days" if days_old > 0 else "Today"
+        print(f"• {symbol} - {strategy} ({age_str})")
+        print(f"  Entry: ₹{entry:.2f} | SL: ₹{sl:.2f} | Target: ₹{target:.2f}")
+        print()
+    
+    print("=" * 70)
+    print(f"Active: {intraday_count + swing_count} (Intraday: {intraday_count}, Swing: {swing_count})")
+    print(f"Max allowed: {Config().MAX_CONCURRENT_POSITIONS}")
+    print("=" * 70)
+    print()
+    print("💡 Tips:")
+    print("  • Use --clear-old to mark positions >30 days as inactive")
+    print("  • Use --clear-all to clear all pending positions (use with caution)")
+    print("  • Use --max-positions N to override the limit for next scan")
+
+
 def cmd_schedule(args, config: Config):
     """Manage automation scheduler"""
     scheduler = AutomationScheduler(config)
@@ -135,7 +263,7 @@ def cmd_schedule(args, config: Config):
 def cmd_backtest(args, config: Config):
     """Run backtesting on strategies"""
     from datetime import datetime, timedelta
-    from symbol_loader import load_nifty50
+    from stock_discovery.symbol_loader import load_nifty50
     
     # Parse period
     period_str = args.period.lower()
@@ -197,8 +325,17 @@ Examples:
   # Run intraday scan
   python main.py scan --mode intraday
   
+  # Run with config overrides
+  python main.py scan --mode intraday --min-conviction 55 --max-positions 10
+  
   # Run swing scan with HVB mode
   python main.py scan --mode swing --hvb
+  
+  # View active positions
+  python main.py positions
+  
+  # Clear old positions (>30 days)
+  python main.py positions --clear-old
   
   # Add feedback
   python main.py feedback --pick-id REL_20241230_1000 --took yes --rating 4 --note "Good setup"
@@ -224,6 +361,22 @@ Examples:
     scan_parser.add_argument('--profile', choices=['normal', 'penny_stock', 'hvb', 'aggressive', 'conservative'],
                             help='Use preset configuration profile (overrides other flags)')
     
+    # Config override arguments
+    scan_parser.add_argument('--min-conviction', type=float, metavar='SCORE',
+                            help='Override MIN_CONVICTION_SCORE (default: 60.0)')
+    scan_parser.add_argument('--max-positions', type=int, metavar='N',
+                            help='Override MAX_CONCURRENT_POSITIONS (default: 5)')
+    scan_parser.add_argument('--min-volume', type=int, metavar='VOLUME',
+                            help='Override MIN_AVG_VOLUME (default: 100000)')
+    scan_parser.add_argument('--min-price', type=float, metavar='PRICE',
+                            help='Override MIN_PRICE (default: 50.0)')
+    scan_parser.add_argument('--max-price', type=float, metavar='PRICE',
+                            help='Override MAX_PRICE (default: 5000.0)')
+    scan_parser.add_argument('--top-n', type=int, metavar='N',
+                            help='Override TOP_N_PICKS (default: 3)')
+    scan_parser.add_argument('--ignore-position-limit', action='store_true',
+                            help='Ignore max concurrent positions limit (use with caution)')
+    
     # Feedback command
     feedback_parser = subparsers.add_parser('feedback', help='Add feedback for a pick')
     feedback_parser.add_argument('--pick-id', required=True, help='Pick ID')
@@ -243,6 +396,15 @@ Examples:
     review_parser = subparsers.add_parser('review', help='Performance review')
     review_parser.add_argument('--period', choices=['day', 'week', 'month'],
                               default='week', help='Review period')
+    
+    # Positions command - view and manage active positions
+    positions_parser = subparsers.add_parser('positions', help='View and manage active positions')
+    positions_parser.add_argument('--list', action='store_true', default=True,
+                                 help='List active positions (default action)')
+    positions_parser.add_argument('--clear-old', action='store_true',
+                                 help='Mark old positions (>30 days) as inactive')
+    positions_parser.add_argument('--clear-all', action='store_true',
+                                 help='⚠️  Clear ALL pending positions (use with caution)')
     
     # Schedule command
     parser_schedule = subparsers.add_parser('schedule', help='Automation scheduling')
@@ -279,6 +441,8 @@ Examples:
         cmd_compute_outcomes(args, config)
     elif args.command == 'review':
         cmd_review(args)
+    elif args.command == 'positions':
+        cmd_positions(args)
     elif args.command == 'schedule':
         cmd_schedule(args, config)
     elif args.command == 'backtest':

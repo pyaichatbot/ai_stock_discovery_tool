@@ -8,9 +8,9 @@ import time
 import threading
 from datetime import datetime
 from typing import Optional
-from config import Config
-from scanner_engine import ScannerEngine
-from output_formatter import OutputFormatter
+from .config import Config
+from .scanner_engine import ScannerEngine
+from .output_formatter import OutputFormatter
 import sys
 
 

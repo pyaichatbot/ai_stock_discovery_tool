@@ -7,9 +7,9 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional
 from datetime import datetime, timedelta
-from technical_indicators import TechnicalIndicators
-from scoring_engine import ScoringEngine
-from config import Config
+from ..technical_indicators import TechnicalIndicators
+from ..scoring_engine import ScoringEngine
+from ..config import Config
 
 
 class EarningsEventDrift:

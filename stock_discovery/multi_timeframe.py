@@ -7,8 +7,8 @@ import numpy as np
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 
-from data_fetcher import MarketDataFetcher
-from technical_indicators import TechnicalIndicators
+from .data_fetcher import MarketDataFetcher
+from .technical_indicators import TechnicalIndicators
 
 
 class MultiTimeframeAnalyzer:

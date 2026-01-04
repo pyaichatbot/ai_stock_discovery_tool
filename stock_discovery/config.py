@@ -76,7 +76,7 @@ class Config:
     
     def _load_symbols(self) -> List[str]:
         """Load symbols based on configured source"""
-        from symbol_loader import (
+        from .symbol_loader import (
             SymbolLoader, 
             load_nifty50, 
             load_nifty100, 
@@ -111,7 +111,14 @@ class Config:
             elif self.SYMBOL_SOURCE == 'zerodha_popular':
                 symbols = load_zerodha_popular()
             elif self.SYMBOL_SOURCE == 'csv':
-                symbols = load_from_csv(self.SYMBOL_CSV_PATH)
+                # Update path to data directory if file not found in current location
+                import os
+                csv_path = self.SYMBOL_CSV_PATH
+                if not os.path.exists(csv_path):
+                    data_csv = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", os.path.basename(csv_path))
+                    if os.path.exists(data_csv):
+                        csv_path = data_csv
+                symbols = load_from_csv(csv_path)
             elif self.SYMBOL_SOURCE == 'manual':
                 # Use hardcoded fallback
                 symbols = self._get_fallback_symbols()
