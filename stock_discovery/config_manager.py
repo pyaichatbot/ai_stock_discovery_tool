@@ -102,6 +102,16 @@ class ConfigManager:
         # Apply environment variable overrides
         ConfigManager._apply_env_overrides(config)
         
+        # Apply LLM environment variables
+        if 'STOCK_LLM_ENABLED' in os.environ:
+            config.LLM_ENABLED = os.environ['STOCK_LLM_ENABLED'].lower() in ('true', '1', 'yes')
+        if 'STOCK_LLM_PROVIDER' in os.environ:
+            config.LLM_PROVIDER = os.environ['STOCK_LLM_PROVIDER']
+        if 'STOCK_LLM_MODEL' in os.environ:
+            config.LLM_MODEL = os.environ['STOCK_LLM_MODEL']
+        if 'STOCK_LLM_CACHE_ENABLED' in os.environ:
+            config.LLM_CACHE_ENABLED = os.environ['STOCK_LLM_CACHE_ENABLED'].lower() in ('true', '1', 'yes')
+        
         # Apply explicit overrides (highest priority)
         if overrides:
             for key, value in overrides.items():

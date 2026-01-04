@@ -16,7 +16,8 @@ class PickLedger:
             import os
             # Default to data/picks_ledger.db, fallback to current dir for compatibility
             data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "picks_ledger.db")
-            if os.path.exists(data_path) or os.path.exists(os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")):
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+            if os.path.exists(data_dir):
                 self.db_path = data_path
             else:
                 self.db_path = "picks_ledger.db"  # Fallback for backward compatibility

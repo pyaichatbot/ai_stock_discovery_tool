@@ -12,9 +12,10 @@ from .config import Config
 class LearningEngine:
     """Adaptive learning from feedback and outcomes"""
     
-    def __init__(self, config: Config, ledger: PickLedger):
+    def __init__(self, config: Config, ledger: PickLedger, llm_service=None):
         self.config = config
         self.ledger = ledger
+        self.llm_service = llm_service
         
         # Strategy base weights (equal start)
         self.strategy_weights = {
@@ -83,6 +84,10 @@ class LearningEngine:
         # Recalculate strategy weights if in learning mode
         if self.should_learn():
             self._recalculate_weights(regime)
+        
+        # LLM analysis of outcome if available
+        if self.llm_service and self.llm_service.available:
+            self._analyze_outcome_llm(pick_id, outcome, pick_details)
     
     def _update_feature_penalties(self, features: Dict, failed: bool):
         """Update penalties for feature patterns"""
@@ -202,3 +207,56 @@ class LearningEngine:
     def get_strategy_weights(self) -> Dict[str, float]:
         """Get current strategy weights for transparency"""
         return self.strategy_weights.copy()
+    
+    def _analyze_outcome_llm(self, pick_id: str, outcome: Dict, pick_details: Dict):
+        """Use LLM to analyze trade outcome and provide insights"""
+        if not self.llm_service or not self.llm_service.available:
+            return
+        
+        try:
+            strategy = pick_details.get('strategy', '')
+            final_return = outcome.get('final_return', 0)
+            hit_target = outcome.get('hit_target', False)
+            hit_stop = outcome.get('hit_stop', False)
+            mfe = outcome.get('mfe', 0)
+            mae = outcome.get('mae', 0)
+            
+            # Determine success
+            successful = final_return > 0 or hit_target
+            failed = hit_stop or final_return < -5.0
+            
+            context = f"""Trade Outcome Analysis:
+Strategy: {strategy}
+Final Return: {final_return:.2f}%
+Hit Target: {hit_target}
+Hit Stop: {hit_stop}
+Maximum Favorable Excursion (MFE): {mfe:.2f}%
+Maximum Adverse Excursion (MAE): {mae:.2f}%
+Result: {'SUCCESS' if successful else 'FAILED' if failed else 'MIXED'}"""
+            
+            system_prompt = """You are a trading performance analyst. Analyze trade outcomes and provide brief insights (2-3 sentences) on:
+1. Why the trade succeeded or failed
+2. Key patterns or factors
+3. Lessons learned for future trades"""
+            
+            prompt = f"""Analyze this trade outcome:
+
+{context}
+
+Provide brief insights on what worked or what went wrong."""
+            
+            analysis = self.llm_service.analyze(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=0.3,
+                max_tokens=200
+            )
+            
+            if analysis:
+                # Store LLM analysis (could be saved to database or used for learning)
+                # For now, we'll just log it or use it for future pattern recognition
+                pass  # Can be extended to store in database
+                
+        except Exception as e:
+            # Silently fail - LLM analysis is optional
+            pass

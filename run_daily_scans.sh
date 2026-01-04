@@ -5,7 +5,7 @@
 set -e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 cd "$PROJECT_ROOT"
 
 VENV_DIR="venv"
@@ -15,6 +15,67 @@ SCRIPTS_DIR="scripts"
 echo "======================================================================"
 echo "📊 DAILY STOCK SCANS - Setup and Execution"
 echo "======================================================================"
+echo ""
+
+# Check LLM configuration
+LLM_ENABLED="${STOCK_LLM_ENABLED:-true}"
+HAS_OPENAI_KEY=false
+HAS_ANTHROPIC_KEY=false
+
+if [ -n "$STOCK_OPENAI_API_KEY" ] || [ -n "$OPENAI_API_KEY" ]; then
+    HAS_OPENAI_KEY=true
+fi
+
+if [ -n "$STOCK_ANTHROPIC_API_KEY" ] || [ -n "$ANTHROPIC_API_KEY" ]; then
+    HAS_ANTHROPIC_KEY=true
+fi
+
+# Auto-detect provider if not explicitly set
+if [ -z "$STOCK_LLM_PROVIDER" ]; then
+    if [ "$HAS_ANTHROPIC_KEY" = "true" ]; then
+        export STOCK_LLM_PROVIDER="anthropic"
+        LLM_PROVIDER="anthropic"
+        # Set default Anthropic model if not specified
+        if [ -z "$STOCK_LLM_MODEL" ]; then
+            export STOCK_LLM_MODEL="claude-3-haiku-20240307"
+        fi
+    elif [ "$HAS_OPENAI_KEY" = "true" ]; then
+        export STOCK_LLM_PROVIDER="openai"
+        LLM_PROVIDER="openai"
+    else
+        LLM_PROVIDER="${STOCK_LLM_PROVIDER:-openai}"
+    fi
+else
+    LLM_PROVIDER="$STOCK_LLM_PROVIDER"
+    # Set appropriate default model if provider is set but model is not
+    if [ -z "$STOCK_LLM_MODEL" ]; then
+        if [ "$LLM_PROVIDER" = "anthropic" ]; then
+            export STOCK_LLM_MODEL="claude-3-haiku-20240307"
+        fi
+    fi
+fi
+
+# Display LLM status
+if [ "$LLM_ENABLED" = "true" ] || [ "$LLM_ENABLED" = "True" ] || [ "$LLM_ENABLED" = "1" ]; then
+    if [ "$LLM_PROVIDER" = "openai" ] && [ "$HAS_OPENAI_KEY" = "true" ]; then
+        echo "🤖 LLM: ENABLED (OpenAI) - Auto-detected from API key"
+    elif [ "$LLM_PROVIDER" = "anthropic" ] && [ "$HAS_ANTHROPIC_KEY" = "true" ]; then
+        echo "🤖 LLM: ENABLED (Anthropic) - Auto-detected from API key"
+    elif [ "$LLM_PROVIDER" = "local" ] || [ "$LLM_PROVIDER" = "ollama" ]; then
+        echo "🤖 LLM: ENABLED (Local/Ollama)"
+    else
+        echo "🤖 LLM: CONFIGURED but API key not found - will use keyword-based methods"
+        if [ "$LLM_PROVIDER" = "openai" ]; then
+            echo "   💡 Set STOCK_OPENAI_API_KEY to enable LLM features"
+        elif [ "$LLM_PROVIDER" = "anthropic" ]; then
+            echo "   💡 Set STOCK_ANTHROPIC_API_KEY to enable LLM features"
+        else
+            echo "   💡 Set STOCK_OPENAI_API_KEY or STOCK_ANTHROPIC_API_KEY to enable LLM features"
+        fi
+    fi
+else
+    echo "🤖 LLM: DISABLED (using keyword-based methods)"
+fi
 echo ""
 
 # Check if virtual environment exists
@@ -53,7 +114,7 @@ echo ""
 # Run daily stocks script
 echo "📈 Running daily_stocks.py..."
 echo "----------------------------------------------------------------------"
-python "$PROJECT_ROOT/scripts/daily_stocks.py"
+python scripts/daily_stocks.py
 STOCKS_EXIT_CODE=$?
 
 echo ""
@@ -70,7 +131,7 @@ echo ""
 # Run daily penny stocks script
 echo "💰 Running daily_penny_stocks.py..."
 echo "----------------------------------------------------------------------"
-python "$PROJECT_ROOT/scripts/daily_penny_stocks.py"
+python scripts/daily_penny_stocks.py
 PENNY_EXIT_CODE=$?
 
 echo ""
@@ -91,6 +152,21 @@ if [ $STOCKS_EXIT_CODE -eq 0 ] && [ $PENNY_EXIT_CODE -eq 0 ]; then
     echo "✅ Both scans completed successfully"
     echo ""
     echo "📁 Output files saved in: daily_picks/$(date +%Y-%m-%d)/"
+    echo ""
+    
+    # Show LLM status in summary
+    if [ "$LLM_ENABLED" = "true" ] || [ "$LLM_ENABLED" = "True" ] || [ "$LLM_ENABLED" = "1" ]; then
+        if [ "$LLM_PROVIDER" = "openai" ] && [ "$HAS_OPENAI_KEY" = "true" ]; then
+            echo "🤖 LLM-enhanced analysis was used for insights (OpenAI)"
+        elif [ "$LLM_PROVIDER" = "anthropic" ] && [ "$HAS_ANTHROPIC_KEY" = "true" ]; then
+            echo "🤖 LLM-enhanced analysis was used for insights (Anthropic)"
+        elif [ "$LLM_PROVIDER" = "local" ] || [ "$LLM_PROVIDER" = "ollama" ]; then
+            echo "🤖 LLM-enhanced analysis was used (local model)"
+        else
+            echo "💡 Tip: Set STOCK_OPENAI_API_KEY or STOCK_ANTHROPIC_API_KEY to enable LLM-enhanced analysis"
+        fi
+    fi
+    
     exit 0
 else
     echo "⚠️  One or more scans had issues"

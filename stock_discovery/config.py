@@ -58,6 +58,14 @@ class Config:
     WEIGHT_ADJUSTMENT_CONSERVATIVE: float = 0.05  # ±5%
     WEIGHT_ADJUSTMENT_FULL: float = 0.20  # ±20%
     
+    # LLM Configuration
+    LLM_ENABLED: bool = True  # Master switch for LLM features
+    LLM_PROVIDER: str = "openai"  # openai, anthropic, local, none
+    LLM_MODEL: str = "gpt-4o-mini"  # Model name (provider-specific)
+    LLM_TEMPERATURE: float = 0.3  # Lower for consistency
+    LLM_CACHE_ENABLED: bool = True  # Enable response caching
+    LLM_CACHE_DURATION: int = 3600  # Cache duration in seconds (1 hour)
+    
     # Symbol Loading Configuration
     # Options: 'nifty50', 'nifty100', 'nifty200', 'nifty500', 
     #          'nifty_smallcap100', 'nifty_smallcap250', 'nifty_midcap150',

@@ -1,6 +1,7 @@
 """
 AI-Powered Stock Discovery Tool - News & Event Fetcher
 Uses Google News RSS (free, no subscription required)
+Enhanced with LLM for advanced sentiment analysis
 """
 
 import feedparser
@@ -31,15 +32,17 @@ class NewsFetcher:
         'financial results', 'revenue', 'profit', 'eps'
     ]
     
-    def __init__(self, cache_duration_minutes: int = 30):
+    def __init__(self, cache_duration_minutes: int = 30, llm_service=None):
         """
         Initialize news fetcher
         
         Args:
             cache_duration_minutes: How long to cache news (default 30 min)
+            llm_service: Optional LLMService instance for advanced analysis
         """
         self.cache_duration = timedelta(minutes=cache_duration_minutes)
         self._cache = {}  # symbol -> (timestamp, news_data)
+        self.llm_service = llm_service
     
     def get_stock_news(self, symbol: str, max_articles: int = 10) -> List[Dict]:
         """
@@ -92,12 +95,13 @@ class NewsFetcher:
             print(f"⚠️  News fetch error for {symbol}: {e}")
             return []
     
-    def calculate_sentiment(self, articles: List[Dict]) -> Dict:
+    def calculate_sentiment(self, articles: List[Dict], symbol: str = "") -> Dict:
         """
-        Calculate sentiment from news articles using keyword matching
+        Calculate sentiment from news articles using LLM-enhanced analysis
         
         Args:
             articles: List of news article dicts
+            symbol: Stock symbol for context (optional)
         
         Returns:
             Dict with polarity (-1 to +1), confidence (0 to 1), and summary
@@ -110,6 +114,90 @@ class NewsFetcher:
                 'article_count': 0
             }
         
+        # Try LLM analysis first if available
+        if self.llm_service and self.llm_service.available:
+            llm_result = self._calculate_sentiment_llm(articles, symbol)
+            if llm_result:
+                return llm_result
+        
+        # Fallback to keyword-based analysis
+        return self._calculate_sentiment_keywords(articles)
+    
+    def _calculate_sentiment_llm(self, articles: List[Dict], symbol: str) -> Optional[Dict]:
+        """Calculate sentiment using LLM analysis"""
+        try:
+            # Prepare article text
+            article_texts = []
+            for article in articles[:10]:  # Limit to 10 most recent
+                title = article.get('title', '')
+                summary = article.get('summary', '')
+                article_texts.append(f"Title: {title}\nSummary: {summary}")
+            
+            articles_text = "\n\n---\n\n".join(article_texts)
+            
+            system_prompt = """You are a financial news analyst. Analyze stock news articles and provide:
+1. Overall sentiment (positive/negative/neutral)
+2. Key events or catalysts mentioned
+3. Market impact assessment
+4. Confidence level
+
+Respond in JSON format with: polarity (-1 to 1), confidence (0 to 1), summary (brief), key_events (list), market_impact (string)."""
+            
+            prompt = f"""Analyze these news articles for {symbol if symbol else 'the stock'}:
+
+{articles_text}
+
+Provide sentiment analysis in JSON format."""
+            
+            response = self.llm_service.analyze(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=0.3,
+                max_tokens=300
+            )
+            
+            if response:
+                # Try to parse JSON response
+                import json
+                try:
+                    # Extract JSON from response (might have markdown formatting)
+                    json_start = response.find('{')
+                    json_end = response.rfind('}') + 1
+                    if json_start >= 0 and json_end > json_start:
+                        result = json.loads(response[json_start:json_end])
+                        
+                        return {
+                            'polarity': float(result.get('polarity', 0.0)),
+                            'confidence': float(result.get('confidence', 0.5)),
+                            'summary': result.get('summary', 'LLM analysis completed'),
+                            'article_count': len(articles),
+                            'key_events': result.get('key_events', []),
+                            'market_impact': result.get('market_impact', ''),
+                            'llm_analyzed': True
+                        }
+                except:
+                    # If JSON parsing fails, extract sentiment from text
+                    polarity = 0.0
+                    if 'positive' in response.lower():
+                        polarity = 0.5
+                    elif 'negative' in response.lower():
+                        polarity = -0.5
+                    
+                    return {
+                        'polarity': polarity,
+                        'confidence': 0.7,
+                        'summary': response[:200],  # First 200 chars
+                        'article_count': len(articles),
+                        'llm_analyzed': True
+                    }
+        except Exception as e:
+            # Fallback to keyword method on error
+            pass
+        
+        return None
+    
+    def _calculate_sentiment_keywords(self, articles: List[Dict]) -> Dict:
+        """Calculate sentiment using keyword matching (fallback method)"""
         positive_count = 0
         negative_count = 0
         earnings_detected = False
@@ -160,7 +248,8 @@ class NewsFetcher:
             'article_count': total_articles,
             'positive_count': positive_count,
             'negative_count': negative_count,
-            'earnings_detected': earnings_detected
+            'earnings_detected': earnings_detected,
+            'llm_analyzed': False
         }
     
     def get_sentiment_for_symbol(self, symbol: str) -> Dict:
@@ -174,7 +263,7 @@ class NewsFetcher:
             Sentiment dict with polarity, confidence, summary
         """
         articles = self.get_stock_news(symbol, max_articles=10)
-        sentiment = self.calculate_sentiment(articles)
+        sentiment = self.calculate_sentiment(articles, symbol=symbol)
         return sentiment
     
     def detect_earnings_event(self, symbol: str) -> bool:

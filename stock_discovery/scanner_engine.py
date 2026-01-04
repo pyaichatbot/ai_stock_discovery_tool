@@ -30,11 +30,25 @@ class ScannerEngine:
         self.config = config
         self.fetcher = MarketDataFetcher()
         self.ledger = PickLedger()
-        self.learning = LearningEngine(config, self.ledger)
-        self.news_fetcher = NewsFetcher(cache_duration_minutes=30)
+        
+        # Initialize LLM service if enabled
+        llm_service = None
+        if config.LLM_ENABLED:
+            from .llm_service import LLMService
+            llm_service = LLMService(
+                provider=config.LLM_PROVIDER,
+                model=config.LLM_MODEL,
+                enabled=config.LLM_ENABLED,
+                cache_enabled=config.LLM_CACHE_ENABLED,
+                cache_duration=config.LLM_CACHE_DURATION
+            )
+        
+        self.learning = LearningEngine(config, self.ledger, llm_service)
+        self.news_fetcher = NewsFetcher(cache_duration_minutes=30, llm_service=llm_service)
         self.market_context = MarketContext()
         self.risk_manager = RiskManager(config, self.ledger)
         self.fundamental_analyzer = FundamentalAnalyzer()
+        self.llm_service = llm_service
         
         # Initialize strategies
         self.orb = OpeningRangeBreakout(config)
@@ -120,9 +134,10 @@ class ScannerEngine:
         else:
             top_picks = candidates[:self.config.TOP_N_PICKS]
         
-        # Save to ledger
+        # Save to ledger and add LLM service reference for output formatting
         for pick in top_picks:
             pick['market_regime'] = index_trend
+            pick['_llm_service'] = self.llm_service  # Pass LLM service for output formatting
             self.ledger.save_pick(pick)
         
         return top_picks
@@ -305,7 +320,8 @@ class ScannerEngine:
         best['fundamental_score'] = fundamental_check.get('fundamental_score', 50.0)
         best['fundamental_metrics'] = fundamental_check.get('metrics', {})
         
-        return {
+        # Build pick dictionary
+        pick = {
             'pick_id': pick_id,
             'symbol': symbol,
             'timestamp': datetime.now().isoformat(),
@@ -313,6 +329,36 @@ class ScannerEngine:
             'currency_symbol': self.config.CURRENCY_SYMBOL,
             **best
         }
+        
+        # Add LLM-generated insights if available
+        if self.llm_service and self.llm_service.available:
+            try:
+                # Generate risk assessment
+                risk_assessment = self.llm_service.generate_risk_assessment(pick)
+                if risk_assessment:
+                    pick['llm_risk_assessment'] = risk_assessment
+            except Exception as e:
+                print(f"⚠️  LLM risk assessment failed for {symbol}: {e}")
+            
+            try:
+                # Generate market context
+                market_context = self.llm_service.generate_market_context(pick, regime)
+                if market_context:
+                    pick['llm_market_context'] = market_context
+            except Exception as e:
+                print(f"⚠️  LLM market context failed for {symbol}: {e}")
+            
+            try:
+                # Generate news impact
+                news_articles = self.news_fetcher.get_stock_news(symbol, max_articles=5)
+                if news_articles:
+                    news_impact = self.llm_service.generate_news_impact(symbol, news_articles)
+                    if news_impact:
+                        pick['llm_news_impact'] = news_impact
+            except Exception as e:
+                print(f"⚠️  LLM news impact failed for {symbol}: {e}")
+        
+        return pick
     
     def compute_outcomes_for_pending_picks(self):
         """

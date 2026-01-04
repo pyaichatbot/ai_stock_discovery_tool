@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from stock_discovery.config import Config
+from stock_discovery.config_manager import ConfigManager
 from stock_discovery.scanner_engine import ScannerEngine
 from stock_discovery.output_formatter import OutputFormatter
 from stock_discovery.database import PickLedger
@@ -138,34 +139,32 @@ def main():
         print(f"📁 Daily folder: {daily_folder}")
         print()
         
-        # Clear positions from previous days before scanning
-        # For daily scans, we want fresh picks each day
+        # Clear ALL pending positions before scanning
+        # For daily scans, we want completely fresh picks each day
+        # This ensures we don't hit position limits from previous scans
         ledger = PickLedger()
         pending = ledger.get_picks_without_outcomes()
         cleared_count = 0
-        from datetime import datetime
-        today = datetime.now().date()
         
+        # Clear all pending positions to start fresh
         for pick in pending:
-            pick_time = datetime.fromisoformat(pick['timestamp'])
-            pick_date = pick_time.date()
-            
-            # Clear all positions not from today
-            if pick_date < today:
-                ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
-                cleared_count += 1
+            ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
+            cleared_count += 1
         
         if cleared_count > 0:
-            print(f"🧹 Cleared {cleared_count} positions from previous days")
+            print(f"🧹 Cleared {cleared_count} pending positions from previous scans")
+            print("   (Daily scans start fresh each day)")
             print()
         
-        # Initialize with default config
-        config = Config()
+        # Initialize config using ConfigManager (reads environment variables)
+        config = ConfigManager.create_config()
         
         # Apply optimized settings for daily scans
         config.MIN_CONVICTION_SCORE = 55.0  # Lower threshold to find more opportunities
         config.MAX_CONCURRENT_POSITIONS = 10  # Higher limit for daily scans
         print(f"🔧 Using optimized settings: MIN_CONVICTION={config.MIN_CONVICTION_SCORE}, MAX_POSITIONS={config.MAX_CONCURRENT_POSITIONS}")
+        if config.LLM_ENABLED:
+            print(f"🤖 LLM: {config.LLM_PROVIDER.upper()} (model: {config.LLM_MODEL})")
         print()
         
         scanner = ScannerEngine(config)

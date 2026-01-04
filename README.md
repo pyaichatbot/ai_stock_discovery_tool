@@ -8,6 +8,7 @@ Mac-only stock discovery system with AI-assisted analysis and feedback learning.
 
 ✅ **Automated Market Scanning** - Scans NIFTY stocks for opportunities  
 ✅ **4 Core Strategies** - ORB, VWAP Pullback, Momentum Swing, High Volatility Breakout  
+✅ **LLM-Powered Analysis** - Advanced news sentiment, trade rationale, risk assessment (optional)  
 ✅ **Learning from Feedback** - Adapts based on your outcomes and preferences  
 ✅ **Risk Management** - Position sizing, stop-loss, targets  
 ✅ **Pick History** - Complete ledger of all picks and outcomes  
@@ -17,15 +18,24 @@ Mac-only stock discovery system with AI-assisted analysis and feedback learning.
 ### Prerequisites
 - Python 3.11+ (recommended)
 - macOS (tested on Apple Silicon and Intel)
+- OpenAI API key (optional, for LLM features)
 
 ### Setup
 
 ```bash
 # Clone or download the code
-cd stock_discovery
+cd ai_stock_discovery_tool
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On macOS/Linux
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Optional: Set up LLM (for enhanced analysis)
+export STOCK_OPENAI_API_KEY=sk-your-key-here
+export STOCK_LLM_ENABLED=true
 ```
 
 ## Usage

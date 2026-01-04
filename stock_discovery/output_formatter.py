@@ -2,7 +2,7 @@
 AI-Powered Stock Discovery Tool - Output Formatter
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class OutputFormatter:
@@ -64,7 +64,24 @@ class OutputFormatter:
                 if fund_summary:
                     output.append(f"   📊 Fundamentals: {fund_summary}")
             
-            output.append(f"   Setup: {OutputFormatter._generate_reason(pick)}")
+            # Generate reason (with LLM if available)
+            llm_service = pick.get('_llm_service')  # Passed from scanner
+            reason = OutputFormatter._generate_reason(pick, llm_service)
+            output.append(f"   Setup: {reason}")
+            
+            # Add LLM-generated insights if available
+            # Check if LLM insights exist (don't need to check llm_service.available here)
+            risk_assessment = pick.get('llm_risk_assessment')
+            if risk_assessment:
+                output.append(f"   ⚠️  Risk Assessment: {risk_assessment}")
+            
+            market_context = pick.get('llm_market_context')
+            if market_context:
+                output.append(f"   📊 Market Context: {market_context}")
+            
+            news_impact = pick.get('llm_news_impact')
+            if news_impact:
+                output.append(f"   📰 News Impact: {news_impact}")
             
             # Show learning adjustments if any
             if 'learning_adjustments' in pick and pick['learning_adjustments']:
@@ -89,8 +106,73 @@ class OutputFormatter:
         return "\n".join(output)
     
     @staticmethod
-    def _generate_reason(pick: Dict) -> str:
-        """Generate human-readable reason"""
+    def _generate_reason(pick: Dict, llm_service=None) -> str:
+        """Generate human-readable reason using LLM if available, fallback to template"""
+        # Try LLM generation first if available
+        if llm_service and llm_service.available:
+            llm_reason = OutputFormatter._generate_reason_llm(pick, llm_service)
+            if llm_reason:
+                return llm_reason
+        
+        # Fallback to template-based reason
+        return OutputFormatter._generate_reason_template(pick)
+    
+    @staticmethod
+    def _generate_reason_llm(pick: Dict, llm_service) -> Optional[str]:
+        """Generate trade rationale using LLM"""
+        try:
+            strategy = pick['strategy']
+            symbol = pick.get('symbol', '').replace('.NS', '')
+            features = pick.get('features', {})
+            conviction = pick.get('conviction_score', 0)
+            entry = pick.get('entry_price', 0)
+            sl = pick.get('stop_loss', 0)
+            target = pick.get('target_price', 0)
+            
+            # Build context for LLM
+            context_parts = [
+                f"Stock: {symbol}",
+                f"Strategy: {strategy}",
+                f"Conviction Score: {conviction:.1f}/100",
+                f"Entry: ₹{entry:.2f}, Stop Loss: ₹{sl:.2f}, Target: ₹{target:.2f}"
+            ]
+            
+            # Add technical indicators
+            if 'rsi' in features:
+                context_parts.append(f"RSI: {features['rsi']:.1f}")
+            if 'volume_surge' in features:
+                context_parts.append(f"Volume: {'Strong surge' if features['volume_surge'] else 'Normal'}")
+            if 'volatility_percentile' in features:
+                context_parts.append(f"Volatility: {features['volatility_percentile']:.0f}th percentile")
+            
+            context = "\n".join(context_parts)
+            
+            system_prompt = """You are a senior stock trader explaining trade setups. Provide concise, actionable rationale (2-3 sentences) explaining why this setup is compelling. Focus on key technical factors and market context. Be specific and professional."""
+            
+            prompt = f"""Explain why this trade setup is compelling:
+
+{context}
+
+Provide a brief, professional trade rationale (2-3 sentences max)."""
+            
+            response = llm_service.analyze(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=0.3,
+                max_tokens=150
+            )
+            
+            if response:
+                return response.strip()
+        except Exception as e:
+            # Fallback to template on error
+            pass
+        
+        return None
+    
+    @staticmethod
+    def _generate_reason_template(pick: Dict) -> str:
+        """Generate template-based reason (fallback)"""
         strategy = pick['strategy']
         features = pick.get('features', {})
         

@@ -165,25 +165,21 @@ def main():
         print(f"📁 Daily folder: {daily_folder}")
         print()
         
-        # Clear positions from previous days before scanning
-        # For daily scans, we want fresh picks each day
+        # Clear ALL pending positions before scanning
+        # For daily scans, we want completely fresh picks each day
+        # This ensures we don't hit position limits from previous scans
         ledger = PickLedger()
         pending = ledger.get_picks_without_outcomes()
         cleared_count = 0
-        from datetime import datetime
-        today = datetime.now().date()
         
+        # Clear all pending positions to start fresh
         for pick in pending:
-            pick_time = datetime.fromisoformat(pick['timestamp'])
-            pick_date = pick_time.date()
-            
-            # Clear all positions not from today
-            if pick_date < today:
-                ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
-                cleared_count += 1
+            ledger.save_outcome(pick['pick_id'], 0.0, 0.0, 0.0, False, False)
+            cleared_count += 1
         
         if cleared_count > 0:
-            print(f"🧹 Cleared {cleared_count} positions from previous days")
+            print(f"🧹 Cleared {cleared_count} pending positions from previous scans")
+            print("   (Daily scans start fresh each day)")
             print()
         
         # Initialize with penny stock config
